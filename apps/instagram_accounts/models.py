@@ -1,11 +1,14 @@
 from django.db import models
 from apps.authentication.models import UserProfile
-
+from cloudinary.uploader import destroy
+from urllib.parse import urlparse
 
 
 class InstagramAccount(models.Model):
     user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="instagram_accounts")
-    username = models.CharField(max_length=255, unique=True)
+    ig_user_id = models.IntegerField(blank=True, null=True ,unique=True)  
+    
+    username = models.CharField(max_length=255, unique=False)
     full_name = models.CharField(max_length=255, blank=True, null=True)
     profile_pic_url = models.URLField(blank=True, null=True)
     is_verified = models.BooleanField(default=False)
@@ -19,6 +22,24 @@ class InstagramAccount(models.Model):
     auth_data = models.JSONField()  # Stores Instagrapi's load.json content
     added_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    is_loggin_required = models.BooleanField(default=False)
+    
+    
+    def delete(self, *args, **kwargs):
+        """Delete the profile picture from Cloudinary before deleting the instance"""
+        if self.profile_pic_url:
+            public_id = self.get_cloudinary_public_id()
+            if public_id:
+                destroy(public_id)  # Delete image from Cloudinary
+        super().delete(*args, **kwargs)
+
+    def get_cloudinary_public_id(self):
+        """Extract Cloudinary public ID from the stored URL"""
+        if self.profile_pic_url:
+            path = urlparse(self.profile_pic_url).path  # Extract the path from URL
+            return path.strip("/").split("/")[-1].split(".")[0]  # Get public ID
+        return None
 
 
 class UploadOption(models.TextChoices):

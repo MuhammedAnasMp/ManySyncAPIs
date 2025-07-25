@@ -36,53 +36,50 @@ def generate_unique_username(email):
         counter += 1
 
     return username
-
+from datetime import timedelta
+from django.utils import timezone
+from .models import CustomSession
 class VerifyFirebaseTokenView(APIView):
-
     def post(self, request, *args, **kwargs):
-        print(request.user)
-        
-        
-            # uid = request.get('uid')
-            # email = decoded_token.get('email')
-            # photo_url = decoded_token.get('picture', '')
-            # phone_number = decoded_token.get('phone_number', '')
-
-           
-            # unique_username = generate_unique_username(request.email)
-
-            # # Get or create a Django user
-            # user, created = UserProfile.objects.get_or_create(
-            #     firebase_uid=request.uid,
-            #     defaults={
-            #         'username': unique_username,  # Use the generated unique username
-            #         'email': request.email,
-            #         'photo': request.photo_url,
-            #         'phone_number': request.phone_number,
-            #     }
-            # )
         try:
-    
-            # Return a success response
-            return JsonResponse({
+            user = request.user  # Ensure this is populated from your Firebase middleware
+
+            # Create custom session
+            expires = timezone.now() + timedelta(days=7)  # 7-day session
+            custom_session = CustomSession.objects.create(user=user, expires_at=expires)
+
+            response = JsonResponse({
                 'status': 'success',
-                # 'uid': request.user.uid,
-                'email': request.user.email,
-                'user_id': request.user.id,
-                'photo': request.user.photo,
-                'username': request.user.username,  # Include the username in the response
+                'message': 'Session created',
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
             })
 
-        except json.JSONDecodeError:
-            return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-        except auth.InvalidIdTokenError:
-            return JsonResponse({'status': 'error', 'message': 'Invalid Firebase token'}, status=400)
+            # Set session token in cookie
+            response.set_cookie(
+                key='custom_session_token',
+                value=str(custom_session.session_token),
+                max_age=7 * 24 * 60 * 60,  # 7 days
+                httponly=True,  # Protect from JS access
+                samesite='Lax',
+                secure=False  # Set to True in production with HTTPS
+            )
+
+            return response
+
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
 class ProtectedView(APIView):
     def post(self, request):
         return Response({'message': 'You are authenticated!', 'user': request.user.username})
+
+from rest_framework.decorators import api_view
+@api_view(['POST'])
+def logout_view(request):
+    response = Response({"message": "Logged out"})
+    response.delete_cookie('custom_session_token')
+    return response
 
 
 

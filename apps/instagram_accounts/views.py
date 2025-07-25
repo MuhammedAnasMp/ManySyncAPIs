@@ -4,13 +4,12 @@ from datetime import datetime
 from cloudinary.uploader import upload
 from django.db import IntegrityError
 from django.http import JsonResponse
-from .models import ReelUploadTask
-from instagrapi import Client  # or your choice of library
+from instagrapi import Client
+from .models import ReelUploadTask  # or your choice of library
 from rest_framework.views import APIView
 from rest_framework import status
 from apps.authentication.authentication import FirebaseAuthentication
 from instagrapi.exceptions import UnknownError, PleaseWaitFewMinutes, BadCredentials, ChallengeRequired
-from instagrapi import Client
 cl=Client()
 @shared_task
 def upload_reel_task(reel_upload_id):
@@ -35,7 +34,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import JsonResponse
 import json
-from instagrapi import Client
 from instagrapi.exceptions import (
     UnknownError, PleaseWaitFewMinutes, BadCredentials, ChallengeRequired
 )
@@ -46,12 +44,10 @@ from .serializer import InstagramAccountSerializer
 from rest_framework.generics import ListAPIView
 class UserInstagramAccountsView(ListAPIView):
     serializer_class = InstagramAccountSerializer
-    authentication_classes = [FirebaseAuthentication]
 
     def get_queryset(self):
         return InstagramAccount.objects.filter(user=self.request.user)
 class IgLoginClassView(APIView):
-    authentication_classes = [FirebaseAuthentication]
 
     def post(self, request):
         try:
@@ -159,7 +155,6 @@ class IgLoginClassView(APIView):
         return Response({"message": "Account removed successfully"}, status=status.HTTP_200_OK)
         
 class IgVerifyLoginView(APIView):
-    authentication_classes = [FirebaseAuthentication]
 
     def post(self, request):
         try:
@@ -224,9 +219,10 @@ class IgVerifyLoginView(APIView):
 
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from instagrapi import Client
 from .models import InstagramAccount
 from instagrapi.exceptions import ClientNotFoundError, UserNotFound
+
+
 def get_instagram_stats(request, igAccountId):
     """
     Fetch Instagram stats for the given igAccountId.

@@ -41,16 +41,28 @@ if DEBUG == "True":
         "http://127.0.0.1:5173",
         "http://192.168.43.106:5173"
     ]
+    CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "https://yourdomain.com",  # if applicable
+]
+
 else:
     if DEVELOPMENTDEBUG == "True":
         print('PRODUCTION LOCAL')
         ALLOWED_HOSTS = ['localhost', '127.0.0.1', os.getenv('BACKEND_HOST', '')]
         CORS_ALLOWED_ORIGINS = ['http://localhost:5173',
                                 'http://localhost:4173', os.getenv('FRONTEND_DOMAIN', '')]
+        CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "https://yourdomain.com",  # if applicable
+]
+
     else:
         print("PRODUCTION")
         ALLOWED_HOSTS = [os.getenv('BACKEND_HOST', '')]
         CORS_ALLOWED_ORIGINS = [os.getenv('FRONTEND_DOMAIN', '')]
+        CSRF_TRUSTED_ORIGINS = [os.getenv('FRONTEND_DOMAIN', '')]
+
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -77,6 +89,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # 'apps.authentication.middleware.firebase_auth_middleware.FirebaseAuthMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -84,17 +97,15 @@ MIDDLEWARE = [
 
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
-# REST Framework Authentication and Permissions
+# REST Framework Authentication and 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+      'apps.authentication.authentication.FirebaseAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
-
 # Database Configuration
 if DEBUG == "True":
     DATABASES = {

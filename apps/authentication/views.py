@@ -37,68 +37,50 @@ def generate_unique_username(email):
 
     return username
 
-def verify_firebase_token(request):
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=405)
+class VerifyFirebaseTokenView(APIView):
 
-    try:
-        body = json.loads(request.body.decode('utf-8'))  # Parse JSON manually
-        firebase_token = body.get('firebase_token')
+    def post(self, request, *args, **kwargs):
+        print(request.user)
+        
+        
+            # uid = request.get('uid')
+            # email = decoded_token.get('email')
+            # photo_url = decoded_token.get('picture', '')
+            # phone_number = decoded_token.get('phone_number', '')
 
-        if not firebase_token:
-            return JsonResponse({'status': 'error', 'message': 'Firebase token is required'}, status=400)
+           
+            # unique_username = generate_unique_username(request.email)
 
-        # Verify the Firebase token
-        decoded_token = auth.verify_id_token(firebase_token)
-        uid = decoded_token.get('uid')
-        email = decoded_token.get('email')
-        photo_url = decoded_token.get('picture', '')
-        phone_number = decoded_token.get('phone_number', '')
+            # # Get or create a Django user
+            # user, created = UserProfile.objects.get_or_create(
+            #     firebase_uid=request.uid,
+            #     defaults={
+            #         'username': unique_username,  # Use the generated unique username
+            #         'email': request.email,
+            #         'photo': request.photo_url,
+            #         'phone_number': request.phone_number,
+            #     }
+            # )
+        try:
+    
+            # Return a success response
+            return JsonResponse({
+                'status': 'success',
+                # 'uid': request.user.uid,
+                'email': request.user.email,
+                'user_id': request.user.id,
+                'photo': request.user.photo,
+                'username': request.user.username,  # Include the username in the response
+            })
 
-        if not uid:
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+        except auth.InvalidIdTokenError:
             return JsonResponse({'status': 'error', 'message': 'Invalid Firebase token'}, status=400)
-
-        # Generate a unique username
-        unique_username = generate_unique_username(email)
-
-        # Get or create a Django user
-        user, created = UserProfile.objects.get_or_create(
-            firebase_uid=uid,
-            defaults={
-                'username': unique_username,  # Use the generated unique username
-                'email': email,
-                'photo': photo_url,
-                'phone_number': phone_number,
-            }
-        )
-
-        # Update user profile if it already exists
-        if not created:
-            user.email = email
-            user.photo = photo_url
-            user.phone_number = phone_number
-            user.save()
-
-        # Return a success response
-        return JsonResponse({
-            'status': 'success',
-            'uid': uid,
-            'email': email,
-            'user_id': user.id,
-            'photo': user.photo,
-            'username': user.username,  # Include the username in the response
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-    except auth.InvalidIdTokenError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid Firebase token'}, status=400)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 class ProtectedView(APIView):
-    authentication_classes = [FirebaseAuthentication]
-
     def post(self, request):
         return Response({'message': 'You are authenticated!', 'user': request.user.username})
 

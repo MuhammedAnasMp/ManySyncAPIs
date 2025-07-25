@@ -39,6 +39,8 @@ def generate_unique_username(email):
 from datetime import timedelta
 from django.utils import timezone
 from .models import CustomSession
+
+DEBUG = os.getenv("DEBUG", "").lower() in ["true", "1"]
 class VerifyFirebaseTokenView(APIView):
     def post(self, request, *args, **kwargs):
         try:
@@ -61,9 +63,12 @@ class VerifyFirebaseTokenView(APIView):
             value=str(custom_session.session_token),
             max_age=7 * 24 * 60 * 60,  # 7 days
             httponly=True,
-            samesite='None' if not settings.DEBUG else 'Lax',
-            secure=not settings.DEBUG  # Secure=True when DEBUG is False (i.e., in production)
+            samesite='Lax' if DEBUG else 'None',
+            secure=not DEBUG 
         )
+            
+            print('same site','Lax' if DEBUG else 'None')
+            print("secure",not DEBUG )
 
             return response
 
@@ -73,8 +78,13 @@ class ProtectedView(APIView):
     def post(self, request):
         return Response({'message': 'You are authenticated!', 'user': request.user.username})
 
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
 @api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny]) 
 def logout_view(request):
     response = Response({"message": "Logged out"})
     response.delete_cookie('custom_session_token')
@@ -83,11 +93,10 @@ def logout_view(request):
 
 
 
-
-
-
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
-@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny]) 
 def git_pull(request):
     if request.method == "POST":
         # Step 1: Verify the GitHub webhook secret

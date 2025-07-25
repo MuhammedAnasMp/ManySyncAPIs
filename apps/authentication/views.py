@@ -56,15 +56,14 @@ class VerifyFirebaseTokenView(APIView):
                 'email': user.email,
             })
 
-            # Set session token in cookie
             response.set_cookie(
-                key='custom_session_token',
-                value=str(custom_session.session_token),
-                max_age=7 * 24 * 60 * 60,  # 7 days
-                httponly=True,  # Protect from JS access
-                samesite='Lax',
-                secure=False  # Set to True in production with HTTPS
-            )
+            key='custom_session_token',
+            value=str(custom_session.session_token),
+            max_age=7 * 24 * 60 * 60,  # 7 days
+            httponly=True,
+            samesite='None' if not settings.DEBUG else 'Lax',
+            secure=not settings.DEBUG  # Secure=True when DEBUG is False (i.e., in production)
+        )
 
             return response
 

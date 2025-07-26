@@ -84,10 +84,17 @@ from rest_framework.response import Response
 
 @api_view(['POST'])
 @authentication_classes([])
-@permission_classes([AllowAny]) 
+@permission_classes([AllowAny])
 def logout_view(request):
     response = Response({"message": "Logged out"})
-    response.delete_cookie('custom_session_token')
+    response.delete_cookie(
+        key='custom_session_token',
+        samesite='Lax' if settings.DEBUG else 'None',
+        secure=not settings.DEBUG,
+        httponly=True
+    )
+    print('same site in logout..> ','Lax' if DEBUG else 'None')
+    print("secure in logout ...>",not DEBUG )
     return response
 
 

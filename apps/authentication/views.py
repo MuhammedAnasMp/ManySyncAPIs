@@ -17,7 +17,9 @@ import hmac
 import hashlib
 from .authentication import FirebaseAuthentication
 import json
-
+from datetime import timedelta
+from django.utils import timezone
+from .models import CustomSession
 def index(request):
     return HttpResponse("Hello, world! Welcome to the Blog app.")
 
@@ -36,70 +38,58 @@ def generate_unique_username(email):
         counter += 1
 
     return username
-from datetime import timedelta
-from django.utils import timezone
-from .models import CustomSession
+
 
 DEBUG = os.getenv("DEBUG", "").lower() in ["true", "1"]
 class VerifyFirebaseTokenView(APIView):
     def post(self, request, *args, **kwargs):
         try:
-            user = request.user  # Ensure this is populated from your Firebase middleware
+            user = request.user  # Ensure Firebase auth middleware is setting this
 
-            # Create custom session
-            expires = timezone.now() + timedelta(days=7)  # 7-day session
-            custom_session = CustomSession.objects.create(user=user, expires_at=expires)
+            # Check for valid existing session
+            existing_session = CustomSession.objects.filter(
+                user=user,
+                expires_at__gt=timezone.now()  # still valid
+            ).order_by('-expires_at').first()
 
-            response = JsonResponse({
+            if existing_session:
+                session = existing_session
+                new_session_created = False
+            else:
+                # Create new session
+                expires = timezone.now() + timedelta(days=7)
+                session = CustomSession.objects.create(user=user, expires_at=expires)
+                new_session_created = True
+
+            return JsonResponse({
                 'status': 'success',
-                'message': 'Session created',
+                'message': 'Session reused' if not new_session_created else 'Session created',
                 'user_id': user.id,
                 'username': user.username,
                 'email': user.email,
+                'uid': user.firebase_uid,
+                'sid': str(session.session_token)
             })
-
-            response.set_cookie(
-            key='custom_session_token',
-            value=str(custom_session.session_token),
-            max_age=7 * 24 * 60 * 60,  # 7 days
-            httponly=True,
-            samesite='Lax' if DEBUG else 'None',
-            secure=not DEBUG 
-        )
-            
-            print('same site','Lax' if DEBUG else 'None')
-            print("secure",not DEBUG )
-
-            return response
 
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 class ProtectedView(APIView):
     def post(self, request):
-        return Response({'message': 'You are authenticated!', 'user': request.user.username})
+        return Response({'message': 'You are authenticated!', 'user': request.user.username , 'uid':request.user.firebase_uid})
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.utils.timezone import now
 
 @api_view(['POST'])
 @authentication_classes([])
-@permission_classes([AllowAny])
+@permission_classes([AllowAny]) 
 def logout_view(request):
     response = Response({"message": "Logged out"})
-
-    # Expire the cookie by setting it in the past
-    response.set_cookie(
-        key='custom_session_token',
-        value='',
-        expires=now() - timedelta(days=1),  # past date to expire
-        httponly=True,
-        samesite='Lax' if settings.DEBUG else 'None',
-        secure=not settings.DEBUG
-    )
-
+    response.delete_cookie('custom_session_token')
     return response
+
+
 
 
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")

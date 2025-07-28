@@ -29,8 +29,8 @@ from .models import *
 import uuid
 
 class FirebaseAuthentication(BaseAuthentication):
-    def authenticate(self, request):
-        session_token = request.COOKIES.get('custom_session_token')
+    def authenticate(self, request): 
+        session_token = request.META.get('HTTP_SESSIONS', '')
         if session_token:
             try:
                 session = CustomSession.objects.get(session_token=session_token)
@@ -60,9 +60,11 @@ class FirebaseAuthentication(BaseAuthentication):
 
         print("Authenticated via Firebase")
         username = generate_unique_username(email)
-        user, _ = User.objects.get_or_create(firebase_uid=uid)
-        user.username = username
-        user.save()
+        user, created = User.objects.get_or_create(firebase_uid=uid)
+
+        if created:
+            user.username = username
+            user.save()
 
         expires = timezone.now() + timezone.timedelta(days=7)
         existing_session = CustomSession.objects.filter(user=user, expires_at__gt=timezone.now()).first()

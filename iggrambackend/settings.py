@@ -3,7 +3,7 @@ from pathlib import Path
 import environ
 from firebase_admin import credentials
 import firebase_admin
-
+from corsheaders.defaults import default_headers
 # Initialize environment variables
 env = environ.Env()
 environ.Env.read_env()
@@ -63,7 +63,10 @@ else:
         CORS_ALLOWED_ORIGINS = [os.getenv('FRONTEND_DOMAIN', '')]
         CSRF_TRUSTED_ORIGINS = [os.getenv('FRONTEND_DOMAIN', '')]
 
-
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'Authorization',
+    'Sessions',
+]
 CORS_ALLOW_CREDENTIALS = True
 
 # Application definition

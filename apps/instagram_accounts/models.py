@@ -6,8 +6,7 @@ from urllib.parse import urlparse
 
 class InstagramAccount(models.Model):
     user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="instagram_accounts")
-    ig_user_id = models.IntegerField(blank=True, null=True ,unique=True)  
-    
+    ig_user_id = models.BigIntegerField(blank=True, null=True, unique=True)  # Changed to BigIntegerField for large IDs
     username = models.CharField(max_length=255, unique=False)
     full_name = models.CharField(max_length=255, blank=True, null=True)
     profile_pic_url = models.URLField(blank=True, null=True)
@@ -16,30 +15,36 @@ class InstagramAccount(models.Model):
     external_url = models.URLField(blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
-    gender = models.IntegerField(blank=True, null=True)  # Instagram returns gender as an int (1, 2, 3)
-    is_business = models.BooleanField(default=False)
-    birthday = models.DateField(blank=True, null=True)
-    auth_data = models.JSONField()  # Stores Instagrapi's load.json content
+    gender = models.IntegerField(blank=True, null=True)  # Consider removing (not available)
+    account_type = models.BooleanField(default=False)  # True for Business/Creator, False for Personal
+    birthday = models.DateField(blank=True, null=True)  # Consider removing (not available)
+    follower_count = models.PositiveIntegerField(blank=True, null=True)
+    following_count = models.PositiveIntegerField(blank=True, null=True)
+    media_count = models.PositiveIntegerField(blank=True, null=True)
+    is_private = models.BooleanField(default=False)
     added_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
     is_loggin_required = models.BooleanField(default=False)
     
+    # New fields for token storage
+    access_token = models.TextField(blank=True, null=True)  # Store short-lived or long-lived token
+    token_expiry = models.DateTimeField(blank=True, null=True)  # Store token expiration time
     
-    def delete(self, *args, **kwargs):
-        """Delete the profile picture from Cloudinary before deleting the instance"""
-        if self.profile_pic_url:
-            public_id = self.get_cloudinary_public_id()
-            if public_id:
-                destroy(public_id)  # Delete image from Cloudinary
-        super().delete(*args, **kwargs)
+    
+    # def delete(self, *args, **kwargs):
+    #     """Delete the profile picture from Cloudinary before deleting the instance"""
+    #     if self.profile_pic_url:
+    #         public_id = self.get_cloudinary_public_id()
+    #         if public_id:
+    #             destroy(public_id)  # Delete image from Cloudinary
+    #     super().delete(*args, **kwargs)
 
-    def get_cloudinary_public_id(self):
-        """Extract Cloudinary public ID from the stored URL"""
-        if self.profile_pic_url:
-            path = urlparse(self.profile_pic_url).path  # Extract the path from URL
-            return path.strip("/").split("/")[-1].split(".")[0]  # Get public ID
-        return None
+    # def get_cloudinary_public_id(self):
+    #     """Extract Cloudinary public ID from the stored URL"""
+    #     if self.profile_pic_url:
+    #         path = urlparse(self.profile_pic_url).path  # Extract the path from URL
+    #         return path.strip("/").split("/")[-1].split(".")[0]  # Get public ID
+    #     return None
 
 
 class UploadOption(models.TextChoices):

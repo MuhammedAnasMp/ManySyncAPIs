@@ -1,0 +1,51 @@
+ngrok http --url=wanted-wolf-informed.ngrok-free.app 8000
+
+
+face book new id and password
+poreni8653@kaoing.com 
+15036*Kk
+
+
+henaf79514@kaoing.com
+15036*Kk
+
+
+
+
+🔷 What You Can Do With Proper Setup
+
+With Page Token + Instagram Business ID you can:
+
+✅ Instagram
+
+Publish posts
+
+Publish reels
+
+Read comments
+
+Reply to comments
+
+Send/receive DMs
+
+Get insights
+
+Get mentions
+
+Webhooks for messages & comments
+
+✅ Facebook Page
+
+Post content
+
+Reply to comments
+
+Read messages
+
+Get insights
+
+Webhooks
+
+
+
+User → Facebook Login → Page → Instagram Business → Webhooks

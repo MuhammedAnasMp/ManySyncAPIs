@@ -17,7 +17,9 @@ import hmac
 import hashlib
 from .authentication import FirebaseAuthentication
 import json
-
+from datetime import timedelta
+from django.utils import timezone
+from .models import CustomSession
 def index(request):
     return HttpResponse("Hello, world! Welcome to the Blog app.")
 
@@ -37,79 +39,63 @@ def generate_unique_username(email):
 
     return username
 
-def verify_firebase_token(request):
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=405)
 
-    try:
-        body = json.loads(request.body.decode('utf-8'))  # Parse JSON manually
-        firebase_token = body.get('firebase_token')
+DEBUG = os.getenv("DEBUG", "").lower() in ["true", "1"]
+class VerifyFirebaseTokenView(APIView):
+    def post(self, request, *args, **kwargs):
+        try:
+            user = request.user  # Ensure Firebase auth middleware is setting this
 
-        if not firebase_token:
-            return JsonResponse({'status': 'error', 'message': 'Firebase token is required'}, status=400)
+            # Check for valid existing session
+            existing_session = CustomSession.objects.filter(
+                user=user,
+                expires_at__gt=timezone.now()  # still valid
+            ).order_by('-expires_at').first()
 
-        # Verify the Firebase token
-        decoded_token = auth.verify_id_token(firebase_token)
-        uid = decoded_token.get('uid')
-        email = decoded_token.get('email')
-        photo_url = decoded_token.get('picture', '')
-        phone_number = decoded_token.get('phone_number', '')
+            if existing_session:
+                session = existing_session
+                new_session_created = False
+            else:
+                # Create new session
+                expires = timezone.now() + timedelta(days=7)
+                session = CustomSession.objects.create(user=user, expires_at=expires)
+                new_session_created = True
 
-        if not uid:
-            return JsonResponse({'status': 'error', 'message': 'Invalid Firebase token'}, status=400)
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Session reused' if not new_session_created else 'Session created',
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'uid': user.firebase_uid,
+                'sid': str(session.session_token)
+            })
 
-        # Generate a unique username
-        unique_username = generate_unique_username(email)
-
-        # Get or create a Django user
-        user, created = UserProfile.objects.get_or_create(
-            firebase_uid=uid,
-            defaults={
-                'username': unique_username,  # Use the generated unique username
-                'email': email,
-                'photo': photo_url,
-                'phone_number': phone_number,
-            }
-        )
-
-        # Update user profile if it already exists
-        if not created:
-            user.email = email
-            user.photo = photo_url
-            user.phone_number = phone_number
-            user.save()
-
-        # Return a success response
-        return JsonResponse({
-            'status': 'success',
-            'uid': uid,
-            'email': email,
-            'user_id': user.id,
-            'photo': user.photo,
-            'username': user.username,  # Include the username in the response
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-    except auth.InvalidIdTokenError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid Firebase token'}, status=400)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 class ProtectedView(APIView):
-    authentication_classes = [FirebaseAuthentication]
-
     def post(self, request):
-        return Response({'message': 'You are authenticated!', 'user': request.user.username})
+        return Response({'message': 'You are authenticated!', 'user': request.user.username , 'uid':request.user.firebase_uid})
 
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 
-
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny]) 
+def logout_view(request):
+    response = Response({"message": "Logged out"})
+    response.delete_cookie('custom_session_token')
+    return response
 
 
 
 
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
-@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny]) 
 def git_pull(request):
     if request.method == "POST":
         # Step 1: Verify the GitHub webhook secret

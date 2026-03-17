@@ -1,10 +1,9 @@
 from django.urls import path
-from .views import IgLoginClassView ,UserInstagramAccountsView,IgVerifyLoginView ,get_instagram_stats
+from .views import *
 urlpatterns = [
-    path('post_ig_data', IgLoginClassView.as_view() ),
-    path('post_ig_data/<int:pk>/', IgLoginClassView.as_view() ),
-    path('varify_login', IgVerifyLoginView.as_view() ),
+    path('login', IgLoginClassView.as_view() ),
+    path('delete/<int:pk>/', IgDeleteeClassView.as_view() ),
     path("accounts", UserInstagramAccountsView.as_view()),
-    path('stats/<int:igAccountId>', get_instagram_stats, name='instagram_stats'),
+    path('dashboard-data/<int:igAccountId>', DashboardData.as_view(), name='instagram_stats'),
 
 ]

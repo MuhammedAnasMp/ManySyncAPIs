@@ -33,13 +33,33 @@ else:
 # Verify login success
 try:
     user_info = cl.account_info()
-    print(f"Successfully logged in as: {user_info.username}")
+    print("Instagram Account Information:")
+    print(f"Username: {user_info.username}")
+    print(f"Full Name: {user_info.full_name}")
+    print(f"Profile Picture URL: {user_info.profile_pic_url}")
+    print(f"Is Private: {user_info.is_private}")
+    print(f"Is Verified: {user_info.is_verified}")
+    print(f"Biography: {user_info.biography}")
+    print(f"External URL: {user_info.external_url}")
+    print(f"Email: {user_info.email}")
+    print(f"Phone Number: {user_info.phone_number}")
+    print(f"Gender: {user_info.gender}")
+    print(f"Is Business Account: {user_info.is_business}")
+    print(f"Birthday: {user_info.birthday}")
+    public_info = cl.user_info_by_username(user_info.username)
+    print("\nPublic User Info:")
+    print(f"Followers Count: {public_info.follower_count}")
+    print(f"Following Count: {public_info.following_count}")
+    print(f"Total Posts: {public_info.media_count}")
+
+    print(user_info)
+
 except Exception as e:
     print(f"Login verification failed: {e}")
     exit()  # Exit script if login failed
 
 # Get the media ID from the reel URL
-reel_url = "https://www.instagram.com/p/DF9gpJFTrL_/"
+reel_url = "https://www.instagram.com/p/DLwSx_WIC09/"
 try:
     media_id = cl.media_id(cl.media_pk_from_url(reel_url))
     print(f"Fetched media ID: {media_id}")

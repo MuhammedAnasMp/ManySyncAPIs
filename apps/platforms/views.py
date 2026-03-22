@@ -264,12 +264,12 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
             try:
                 # Try Meta API endpoint for Instagram Graph (me)
                 url = "https://graph.instagram.com/me"
-                params = {"fields": "id,username", "access_token": access_token}
+                params = {"fields": "id,username,user_id", "access_token": access_token}
                 res = requests.get(url, params=params)
                 if res.status_code == 200:
                     data = res.json()
                     account_name = data.get('username', "Unknown Account")
-                    account_id = data.get('id', "")
+                    account_id = data.get('user_id', "")
                 else:
                     # Fallback to Facebook Graph if it's a page/user token
                     url_fb = "https://graph.facebook.com/me"

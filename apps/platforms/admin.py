@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import PlatformAccount, ApiUsageLog, Webhook
+from .models import PlatformAccount, ApiUsageLog, Webhook, DeveloperApp, DeveloperAppAccount
 
 @admin.register(PlatformAccount)
 class PlatformAccountAdmin(admin.ModelAdmin):
@@ -17,3 +17,16 @@ class WebhookAdmin(admin.ModelAdmin):
     list_display = ('event_id', 'platform', 'event_type', 'processed', 'received_at')
     list_filter = ('platform', 'processed', 'received_at')
     readonly_fields = ('received_at',)
+
+
+@admin.register(DeveloperApp)
+class DeveloperAppAdmin(admin.ModelAdmin):
+    list_display = ('app_name', 'platform', 'user', 'created_at')
+    list_filter = ('platform', 'user')
+    search_fields = ('app_name', 'user__username')
+
+@admin.register(DeveloperAppAccount)
+class DeveloperAppAccountAdmin(admin.ModelAdmin):
+    list_display = ('account_name', 'developer_app', 'is_active', 'created_at')
+    list_filter = ('developer_app', 'is_active')
+    search_fields = ('account_name', 'developer_app__app_name')

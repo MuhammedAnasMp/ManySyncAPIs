@@ -90,3 +90,22 @@ class Webhook(BaseModel):
         return f"Webhook {self.event_id} from {self.platform}"
 
 # Create your models here.
+class DeveloperApp(BaseModel):
+    user = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='developer_apps')
+    app_name = models.CharField(max_length=255)
+    platform = models.CharField(max_length=50, default='instagram')
+    app_id = models.CharField(max_length=255)
+    app_secret = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.app_name} ({self.platform})"
+
+class DeveloperAppAccount(BaseModel):
+    developer_app = models.ForeignKey(DeveloperApp, on_delete=models.CASCADE, related_name='associated_accounts')
+    account_name = models.CharField(max_length=255)
+    account_id = models.CharField(max_length=255, null=True, blank=True)
+    access_token = models.TextField()
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.account_name} - {self.developer_app.app_name}"

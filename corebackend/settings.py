@@ -159,7 +159,8 @@ SIMPLE_JWT = {
 
 
 
-CORS_ALLOWED_ORIGINS  = [os.getenv("FRONTEND_URL"),"http://localhost:5174"]
+frontend_url = os.getenv("FRONTEND_URL")
+CORS_ALLOWED_ORIGINS = [url for url in [frontend_url, "http://localhost:5174", "http://localhost:5173"] if url]
 CORS_ALLOW_CREDENTIALS = True
 
 # Allow custom headers for ngrok

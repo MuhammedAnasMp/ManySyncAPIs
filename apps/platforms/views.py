@@ -6,8 +6,8 @@ from django.utils import timezone
 import requests
 import json
 from rest_framework.views import APIView
-from .models import PlatformAccount
-from .serializers import PlatformAccountSerializer
+from .models import PlatformAccount, DeveloperApp, DeveloperAppAccount
+from .serializers import PlatformAccountSerializer, DeveloperAppSerializer, DeveloperAppAccountSerializer
 
 class PlatformAccountViewSet(viewsets.ModelViewSet):
     serializer_class = PlatformAccountSerializer
@@ -237,3 +237,51 @@ class WhatsAppWebhookView(APIView):
             return Response("EVENT_RECEIVED", status=status.HTTP_200_OK)
             
         return Response(status=status.HTTP_404_NOT_FOUND)
+
+class DeveloperAppViewSet(viewsets.ModelViewSet):
+    serializer_class = DeveloperAppSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return DeveloperApp.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
+    serializer_class = DeveloperAppAccountSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return DeveloperAppAccount.objects.filter(developer_app__user=self.request.user)
+
+    def perform_create(self, serializer):
+        access_token = serializer.validated_data.get('access_token')
+        account_name = "Unknown Account"
+        account_id = ""
+        
+        if access_token:
+            try:
+                # Try Meta API endpoint for Instagram Graph (me)
+                url = "https://graph.instagram.com/me"
+                params = {"fields": "id,username", "access_token": access_token}
+                res = requests.get(url, params=params)
+                if res.status_code == 200:
+                    data = res.json()
+                    account_name = data.get('username', "Unknown Account")
+                    account_id = data.get('id', "")
+                else:
+                    # Fallback to Facebook Graph if it's a page/user token
+                    url_fb = "https://graph.facebook.com/me"
+                    params_fb = {"fields": "id,name", "access_token": access_token}
+                    res_fb = requests.get(url_fb, params_fb)
+                    if res_fb.status_code == 200:
+                        data_fb = res_fb.json()
+                        account_name = data_fb.get('name', "Unknown Account")
+                        account_id = data_fb.get('id', "")
+            except Exception as e:
+                print("Error fetching account meta details:", e)
+                pass
+                
+        serializer.save(account_name=account_name, account_id=account_id)
+

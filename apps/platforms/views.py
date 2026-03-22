@@ -4,6 +4,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 import requests
+import json
+from rest_framework.views import APIView
 from .models import PlatformAccount
 from .serializers import PlatformAccountSerializer
 
@@ -167,3 +169,71 @@ class PlatformAccountViewSet(viewsets.ModelViewSet):
             
         except requests.exceptions.RequestException as e:
             return Response({'error': f'Network error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class WhatsAppWebhookView(APIView):
+    """
+    Webhook endpoint for WhatsApp Cloud API.
+    Handles verification (GET) and incoming events (POST).
+    """
+    # Webhooks must be publicly accessible
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        """
+        Handles webhook verification from WhatsApp
+        """
+        # In production, consider moving this to settings or env variables
+        verify_token = "test_webhook_verify_token"
+        
+        mode = request.query_params.get('hub.mode')
+        token = request.query_params.get('hub.verify_token')
+        challenge = request.query_params.get('hub.challenge')
+        
+        if mode and token:
+            if mode == 'subscribe' and token == verify_token:
+                print("✅ WhatsApp Webhook Verified successfully!")
+                return Response(int(challenge), status=status.HTTP_200_OK)
+            else:
+                return Response({'error': 'Invalid verification token'}, status=status.HTTP_403_FORBIDDEN)
+                
+        return Response({'error': 'Missing parameters'}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request, *args, **kwargs):
+        """
+        Handles incoming events from WhatsApp
+        Includes mTLS Client Certificate Verification.
+        """
+        # --- mTLS Client Certificate Verification ---
+        expected_cn = "client.webhooks.fbclientcerts.com"
+        
+        # For AWS ALB, it forwards the subject via "X-Amzn-Mtls-Clientcert-Subject"
+        mtls_subject = request.META.get('HTTP_X_AMZN_MTLS_CLIENTCERT_SUBJECT')
+        
+        # If you are using Nginx/Apache, you might pass it manually e.g., "X-SSL-Client-S-DN"
+        if not mtls_subject:
+            mtls_subject = request.META.get('HTTP_X_SSL_CLIENT_S_DN')
+
+        if mtls_subject:
+            if expected_cn not in mtls_subject:
+                print(f"❌ mTLS Error: Invalid Client Certificate Subject: {mtls_subject}")
+                return Response({'error': 'mTLS Verification Failed'}, status=status.HTTP_403_FORBIDDEN)
+            print("✅ mTLS Client Certificate Verified Successfully!")
+        else:
+            # Note: In production with mTLS strictly enforced at the App-level, 
+            # you might want to return 403 here if the header is completely missing.
+            print("⚠️ mTLS headers missing. Skipping application-level verification.")
+
+        body = request.data
+        
+        # Check if this is a WhatsApp API event
+        if body.get('object'):
+            # Print the entire event to the terminal
+            print("\n" + "="*50)
+            print("🚀 NEW WHATSAPP EVENT RECEIVED")
+            print("="*50)
+            print(json.dumps(body, indent=4))
+            print("="*50 + "\n")
+            
+            return Response("EVENT_RECEIVED", status=status.HTTP_200_OK)
+            
+        return Response(status=status.HTTP_404_NOT_FOUND)

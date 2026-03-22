@@ -28,7 +28,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-7xe&3bj37l^^1fz%5to%g*cvvzwtw437n3d9v#+ltnz4857e=b'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG" , False)
+
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0",os.getenv("BACKEND_HOST")]
 
@@ -57,8 +58,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -156,11 +157,16 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True  # For development
 
 
-CORS_ALLOW_ORIGINS = [os.getenv("FRONTEND_URL")]
+CORS_ALLOWED_ORIGINS  = [os.getenv("FRONTEND_URL"),"http://localhost:5174"]
+CORS_ALLOW_CREDENTIALS = True
+
+# Allow custom headers for ngrok
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "ngrok-skip-browser-warning",
+]
 # Firebase Admin Configuration
 
 # Load environment variables

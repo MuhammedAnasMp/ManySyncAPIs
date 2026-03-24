@@ -255,33 +255,55 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return DeveloperAppAccount.objects.filter(developer_app__user=self.request.user)
 
-    def perform_create(self, serializer):
-        access_token = serializer.validated_data.get('access_token')
+    def create(self, request, *args, **kwargs):
+        access_token = request.data.get('access_token')
+        developer_app_id = request.data.get('developer_app')
         account_name = "Unknown Account"
         account_id = ""
+        profile_picture_url = ""
         
         if access_token:
             try:
                 # Try Meta API endpoint for Instagram Graph (me)
                 url = "https://graph.instagram.com/me"
-                params = {"fields": "id,username,user_id", "access_token": access_token}
+                params = {"fields": "id,username,user_id,profile_picture_url", "access_token": access_token}
                 res = requests.get(url, params=params)
                 if res.status_code == 200:
                     data = res.json()
                     account_name = data.get('username', "Unknown Account")
                     account_id = data.get('user_id', "")
+                    profile_picture_url = data.get('profile_picture_url', "")
                 else:
                     # Fallback to Facebook Graph if it's a page/user token
                     url_fb = "https://graph.facebook.com/me"
-                    params_fb = {"fields": "id,name", "access_token": access_token}
+                    params_fb = {"fields": "id,name,picture", "access_token": access_token}
                     res_fb = requests.get(url_fb, params_fb)
                     if res_fb.status_code == 200:
                         data_fb = res_fb.json()
                         account_name = data_fb.get('name', "Unknown Account")
                         account_id = data_fb.get('id', "")
+                        if "picture" in data_fb and "data" in data_fb["picture"]:
+                            profile_picture_url = data_fb["picture"]["data"].get("url", "")
             except Exception as e:
                 print("Error fetching account meta details:", e)
                 pass
                 
-        serializer.save(account_name=account_name, account_id=account_id)
+        if account_id and developer_app_id:
+            existing = DeveloperAppAccount.objects.filter(
+                developer_app_id=developer_app_id,
+                developer_app__user=request.user,
+                account_id=account_id
+            ).first()
+            if existing:
+                existing.access_token = access_token
+                existing.account_name = account_name
+                existing.profile_picture_url = profile_picture_url
+                existing.save()
+                serializer = self.get_serializer(existing)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(account_name=account_name, account_id=account_id, profile_picture_url=profile_picture_url)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 

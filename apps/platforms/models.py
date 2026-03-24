@@ -104,6 +104,7 @@ class DeveloperAppAccount(BaseModel):
     developer_app = models.ForeignKey(DeveloperApp, on_delete=models.CASCADE, related_name='associated_accounts')
     account_name = models.CharField(max_length=255)
     account_id = models.CharField(max_length=255, null=True, blank=True)
+    profile_picture_url = models.URLField(max_length=1000, null=True, blank=True)
     access_token = models.TextField()
     is_active = models.BooleanField(default=True)
 

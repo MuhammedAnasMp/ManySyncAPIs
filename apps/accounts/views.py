@@ -57,6 +57,22 @@ class FirebaseLoginView(views.APIView):
                     plan="free"
                 )
                 
+                # Assign Free Plan
+                try:
+                    from apps.billing.models import Plan, Subscription
+                    from django.utils import timezone
+                    from datetime import timedelta
+                    free_plan = Plan.objects.get(name="Free")
+                    Subscription.objects.create(
+                        user=user,
+                        plan=free_plan,
+                        is_active=True,
+                        start_date=timezone.now(),
+                        end_date=timezone.now() + timedelta(days=30)
+                    )
+                except Exception as e:
+                    print("Could not assign free plan:", e)
+                
                 # Check for pending invitations
                 from apps.workspaces.models import WorkspaceInvitation, WorkspaceMember
                 pending_invitations = WorkspaceInvitation.objects.filter(email=email, status='pending')

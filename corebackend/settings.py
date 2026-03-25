@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'apps.ai',
     'apps.audit',
     'apps.dashboard',
+    'apps.billing',
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
@@ -209,3 +210,6 @@ if not firebase_admin._apps:
     if filtered_creds:
         cred = credentials.Certificate(filtered_creds)
         firebase_admin.initialize_app(cred)
+# Razorpay Configuration
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")

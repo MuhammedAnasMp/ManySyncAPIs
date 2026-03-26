@@ -46,7 +46,6 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.automation',
     'apps.media',
-    'apps.scheduler',
     'apps.workspaces',
     'apps.platforms',
     'apps.ai',

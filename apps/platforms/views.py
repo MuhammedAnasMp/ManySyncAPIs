@@ -3,11 +3,16 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
-import requests
-import json
+import requests,json,redis
 from rest_framework.views import APIView
 from .models import PlatformAccount, DeveloperApp, DeveloperAppAccount
 from .serializers import PlatformAccountSerializer, DeveloperAppSerializer, DeveloperAppAccountSerializer
+from django.conf import settings
+from django.http import JsonResponse, HttpResponse
+from .utils import check_if_follows
+from django.db import IntegrityError
+
+
 
 class PlatformAccountViewSet(viewsets.ModelViewSet):
     serializer_class = PlatformAccountSerializer
@@ -264,7 +269,7 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
         
         if access_token:
             try:
-                # Try Meta API endpoint for Instagram Graph (me)
+                # Try Instagram Graph API first
                 url = "https://graph.instagram.com/me"
                 params = {"fields": "id,username,user_id,profile_picture_url", "access_token": access_token}
                 res = requests.get(url, params=params)
@@ -274,7 +279,7 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
                     account_id = data.get('user_id', "")
                     profile_picture_url = data.get('profile_picture_url', "")
                 else:
-                    # Fallback to Facebook Graph if it's a page/user token
+                    # Fallback to Facebook Graph API
                     url_fb = "https://graph.facebook.com/me"
                     params_fb = {"fields": "id,name,picture", "access_token": access_token}
                     res_fb = requests.get(url_fb, params_fb)
@@ -286,24 +291,199 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
                             profile_picture_url = data_fb["picture"]["data"].get("url", "")
             except Exception as e:
                 print("Error fetching account meta details:", e)
-                pass
-                
-        if account_id and developer_app_id:
-            existing = DeveloperAppAccount.objects.filter(
-                developer_app_id=developer_app_id,
-                developer_app__user=request.user,
-                account_id=account_id
-            ).first()
-            if existing:
-                existing.access_token = access_token
-                existing.account_name = account_name
-                existing.profile_picture_url = profile_picture_url
-                existing.save()
-                serializer = self.get_serializer(existing)
-                return Response(serializer.data, status=status.HTTP_200_OK)
+                account_name = "Unknown Account"
+                account_id = ""
+                profile_picture_url = ""
 
+        # Only proceed if both account_id and developer_app_id exist
+        if account_id and developer_app_id:
+            # Check if this account already exists globally 
+            existing = DeveloperAppAccount.objects.select_related('developer_app__user').filter(account_id=account_id).first()
+
+            if existing:
+                existing_user = getattr(existing.developer_app, 'user', None)  # safer access
+                print(request.user)
+                if existing_user == request.user:
+                    # Already added by the same user
+                    return Response(
+                        {"detail": "This account is already added to one of your apps."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                else:
+                    # Already added by another user
+                    return Response(
+                        {"detail": "This account is already linked to another user's app."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Try to create a new account entry
+            try:
+                obj = DeveloperAppAccount.objects.create(
+                    developer_app_id=developer_app_id,
+                    account_id=account_id,
+                    account_name=account_name,
+                    profile_picture_url=profile_picture_url,
+                    access_token=access_token
+                )
+            except IntegrityError:
+                # In case of a rare race condition
+                return Response(
+                    {"detail": "This account already exists."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            serializer = self.get_serializer(obj)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        # Fallback if account_id or developer_app_id is missing
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(account_name=account_name, account_id=account_id, profile_picture_url=profile_picture_url)
+        serializer.save(
+            account_name=account_name,
+            account_id=account_id,
+            profile_picture_url=profile_picture_url
+        )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
+
+
+
+r = redis.Redis(host='localhost', port=6379, db=0)
+
+
+class InstagramWebhookView(APIView):
+
+    # 🔐 Webhook verification (Meta setup)
+    def get(self, request):
+        verify_token = "test_webhook_verify_token"
+
+        mode = request.GET.get("hub.mode")
+        token = request.GET.get("hub.verify_token")
+        challenge = request.GET.get("hub.challenge")
+
+        if mode == "subscribe" and token == verify_token:
+            return HttpResponse(challenge, status=200)
+
+        return HttpResponse("Verification failed", status=403)
+
+    # 📩 Handle incoming messages
+    def post(self, request):
+        try:
+            payload = request.data
+        
+            if payload.get('object'):
+                print("\n" + "="*50)
+                print("🚀 New instagram Webhook")
+                print("="*50)
+                print(json.dumps(payload, indent=4))
+                print("="*50 + "\n")
+
+            if payload.get("object") != "instagram":
+                return JsonResponse({"status": "ignored"}, status=200)
+
+            for entry in payload.get("entry", []):
+                for messaging in entry.get("messaging", []):
+
+                    sender_id = messaging.get("sender", {}).get("id")
+                    message = messaging.get("message", {})
+                    text = message.get("text", "").strip()
+
+                    if not sender_id or not text:
+                        continue
+
+                    # ✅ Check if message starts with "aoea"
+                    if text.lower().startswith("aoea"):
+                        print(f"✅ Flag detected from {sender_id}: {text}")
+                        follows = check_if_follows(sender_id, "IGAAUN0phDYERBZAGE1NHBzRXRLWEFPT0EyTEkxVktMZAndRTW1NNzRFSGZARMEN1a3ZA2bHduam93cjYzY0J2SDBiRWhXcjdmWU91LWNTMmFBR25wZA2pkUUNFNi1SWnozVmhRRnh1S21CUjlKTkNZAUndwU1pn")
+                        if follows:
+                            self.handle_handshake(sender_id, text)
+                        else:
+                            self.send_message(
+                                sender_id,
+                                "Please follow our Instagram page first, then type enter the code ."
+                            )
+                        
+                    else:
+                        print(f"📩 Normal message from {sender_id}: {text}")
+                        
+
+            return JsonResponse({"status": "ok"}, status=200)
+
+        except Exception as e:
+            print("Webhook error:", str(e))
+            return JsonResponse({"error": "server error"}, status=500)
+
+    # 🔑 Handshake logic
+    def handle_handshake(self, psid, text):
+        key = f"handshake:{text}"
+        data = r.get(key)
+
+        if not data:
+            self.handle_invalid_code(psid)
+            return
+
+        data = json.loads(data)
+        account_id = data.get("account_id")
+
+        try:
+            account = DeveloperAppAccount.objects.get(id=account_id)
+
+            # 🚨 Already linked to another PSID
+            if account.psid and account.psid != psid:
+                account.is_flagged = True
+                account.save()
+
+                self.send_message(psid, "⚠️ This account is already linked.")
+                return
+
+            # ✅ Success
+            account.psid = psid
+            account.is_verified = True
+            account.is_flagged = False
+            account.save()
+
+            # 🧹 delete used code
+            r.delete(key)
+
+            self.send_message(psid, "✅ Account successfully connected!")
+
+        except DeveloperAppAccount.DoesNotExist:
+            self.handle_invalid_code(psid)
+
+    # ❌ Invalid / expired code
+    def handle_invalid_code(self, psid):
+        self.send_message(psid, "❌ Invalid or expired code.")
+
+        # track failures
+        fail_key = f"fail:{psid}"
+        r.incr(fail_key)
+        r.expire(fail_key, 600)
+
+        attempts = int(r.get(fail_key) or 0)
+
+        if attempts >= 3:
+            account = DeveloperAppAccount.objects.filter(psid=psid).first()
+            if account:
+                account.is_flagged = True
+                account.save()
+
+    # 💬 Send message back
+    def send_message(self, psid, text):
+        import requests
+
+        url = "https://graph.instagram.com/v25.0/me/messages"
+
+        payload = {
+            "recipient": {"id": psid},
+            "message": {"text": text}
+        }
+
+        params = {
+            "access_token": "IGAAUN0phDYERBZAGE1NHBzRXRLWEFPT0EyTEkxVktMZAndRTW1NNzRFSGZARMEN1a3ZA2bHduam93cjYzY0J2SDBiRWhXcjdmWU91LWNTMmFBR25wZA2pkUUNFNi1SWnozVmhRRnh1S21CUjlKTkNZAUndwU1pn"
+        }
+
+        try:
+            requests.post(url, json=payload, params=params)
+        except Exception as e:
+            print("Send message error:", str(e))

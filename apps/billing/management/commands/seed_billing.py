@@ -16,6 +16,7 @@ class Command(BaseCommand):
             {'code': 'priority_queue', 'description': 'Skip ahead in server queue'},
             {'code': 'bulk_upload', 'description': 'Upload media in bulk'},
             {'code': 'advanced_caption', 'description': 'Advanced AI caption tools'},
+            {'code': 'share_to_post', 'description': 'Share to Post functionality'},
         ]
         
         feature_objs = {}
@@ -27,26 +28,26 @@ class Command(BaseCommand):
             {
                 'name': 'Free',
                 'price': 0.00,
-                'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 50},
+                'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 50, 'posts_per_day': 2},
                 'features': ['caption', 'hashtags', 'scheduling']
             },
             {
                 'name': 'Starter',
                 'price': 149.00,
-                'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 120},
+                'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 100, 'posts_per_day': 5},
                 'features': ['caption', 'hashtags', 'scheduling']
             },
             {
                 'name': 'Creator',
                 'price': 399.00,
-                'quotas': {'apps_limit': 1, 'accounts_limit': 3, 'posts_per_month': 500},
-                'features': ['caption', 'hashtags', 'scheduling', 'thumbnail', 'watermark', 'location', 'creator_credit']
+                'quotas': {'apps_limit': 1, 'accounts_limit': 3, 'posts_per_month': 500, 'posts_per_day': 10},
+                'features': ['caption', 'hashtags', 'scheduling', 'thumbnail', 'watermark', 'location', 'creator_credit', 'share_to_post']
             },
             {
                 'name': 'Pro',
                 'price': 999.00,
-                'quotas': {'apps_limit': 100, 'accounts_limit': 10, 'posts_per_month': 1500},
-                'features': ['caption', 'hashtags', 'scheduling', 'thumbnail', 'watermark', 'location', 'creator_credit', 'priority_queue', 'bulk_upload', 'advanced_caption']
+                'quotas': {'apps_limit': 100, 'accounts_limit': 10, 'posts_per_month': 1500, 'posts_per_day': 20},
+                'features': ['caption', 'hashtags', 'scheduling', 'thumbnail', 'watermark', 'location', 'creator_credit', 'priority_queue', 'bulk_upload', 'advanced_caption', 'share_to_post']
             }
         ]
         

@@ -6,15 +6,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         features_data = [
-            {'code': 'caption', 'description': 'Basic AI Captioning'},
-            {'code': 'hashtags', 'description': 'Basic AI Hashtags generation'},
-            {'code': 'scheduling', 'description': 'Automated post scheduling'},
-            {'code': 'thumbnail', 'description': 'Custom thumbnail control'},
-            {'code': 'location', 'description': 'Location tagging for posts'},
-            {'code': 'creator_credit', 'description': 'Dynamic creator crediting'},
-            {'code': 'priority_queue', 'description': 'Skip ahead in server queue'},
-            {'code': 'advanced_caption', 'description': 'Advanced AI caption tools'},
-            {'code': 'share_to_post', 'description': 'Share to Post functionality'},
+                {'code': 'caption', 'description': 'Basic AI Captioning'},
+                {'code': 'hashtags', 'description': 'Basic AI Hashtags generation'},
+                {'code': 'thumbnail', 'description': 'Custom thumbnail control'},
+                {'code': 'location', 'description': 'Location tagging for posts'},
+                {'code': 'creator_credit', 'description': 'Dynamic creator crediting'},
+                {'code': 'advanced_caption', 'description': 'Advanced AI caption tools'},      
+                {'code': 'custom_audio', 'description': 'Custom audio control'},
+                {'code': 'share_to_post', 'description': 'Share to Post functionality'},
+            {'code': 'template_image_posting', 'description': 'Template image posting'},
+            {'code': 'template_reel_posting', 'description': 'Template reel posting'},
+            {'code': 'template_story_posting', 'description': 'Template story posting'},
+            {'code': 'template_video_posting', 'description': 'Template video posting'}    
         ]
         
         feature_objs = {}
@@ -27,25 +30,25 @@ class Command(BaseCommand):
                 'name': 'Free',
                 'price': 0.00,
                 'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 50, 'posts_per_day': 2},
-                'features': ['caption', 'hashtags', 'scheduling']    
+                'features': ['caption', 'hashtags']    
             },
             {
                 'name': 'Starter',
                 'price': 149.00,
                 'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 100, 'posts_per_day': 5},
-                'features': ['caption', 'hashtags', 'scheduling']
+                'features': ['caption', 'hashtags']
             },
             {
                 'name': 'Creator',
                 'price': 399.00,
                 'quotas': {'apps_limit': 1, 'accounts_limit': 3, 'posts_per_month': 500, 'posts_per_day': 10},
-                'features': ['caption', 'hashtags', 'scheduling', 'thumbnail', 'location', 'creator_credit', 'share_to_post']
+                'features': ['caption', 'hashtags', 'thumbnail', 'location', 'creator_credit', 'share_to_post']
             },
             {
                 'name': 'Pro',
                 'price': 999.00,
                 'quotas': {'apps_limit': 100, 'accounts_limit': 10, 'posts_per_month': 1500, 'posts_per_day': 20},
-                'features': ['caption', 'hashtags', 'scheduling', 'thumbnail', 'location', 'creator_credit', 'priority_queue', 'advanced_caption', 'share_to_post']
+                'features': ['caption', 'hashtags', 'thumbnail', 'location', 'creator_credit', 'advanced_caption', 'share_to_post']
             }
         ]
         

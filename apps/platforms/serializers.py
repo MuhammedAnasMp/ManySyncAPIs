@@ -30,3 +30,20 @@ class DeveloperAppSerializer(serializers.ModelSerializer):
         model = DeveloperApp
         fields = ['id', 'user', 'app_name', 'platform', 'app_id', 'app_secret', 'associated_accounts', 'created_at']
         read_only_fields = ['id', 'user', 'created_at']
+
+from .models import Template, AccountTemplate, AccountTemplateConfiguration
+
+class TemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Template
+        fields = '__all__'
+
+class AccountTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AccountTemplate
+        fields = '__all__'
+
+class AccountTemplateConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AccountTemplateConfiguration
+        fields = '__all__'

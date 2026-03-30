@@ -1,11 +1,14 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import PlatformAccountViewSet, WhatsAppWebhookView, DeveloperAppViewSet, DeveloperAppAccountViewSet   , InstagramWebhookView
+from .views import PlatformAccountViewSet, WhatsAppWebhookView, DeveloperAppViewSet, DeveloperAppAccountViewSet, InstagramWebhookView, TemplateViewSet, AccountTemplateViewSet, AccountTemplateConfigurationViewSet
 
 router = DefaultRouter()
 router.register(r'accounts', PlatformAccountViewSet, basename='platform-account')
 router.register(r'developer-apps', DeveloperAppViewSet, basename='developer-apps')
 router.register(r'developer-app-accounts', DeveloperAppAccountViewSet, basename='developer-app-accounts')
+router.register(r'templates', TemplateViewSet, basename='templates')
+router.register(r'account-templates', AccountTemplateViewSet, basename='account-templates')
+router.register(r'account-template-configs', AccountTemplateConfigurationViewSet, basename='account-template-configs')
 
 urlpatterns = [
     path('webhook/whatsapp', WhatsAppWebhookView.as_view(), name='whatsapp-webhook-noslash'),

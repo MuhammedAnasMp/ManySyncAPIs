@@ -109,6 +109,7 @@ class DeveloperAppAccount(models.Model):
         on_delete=models.CASCADE,
         related_name='associated_accounts'
     )
+    created_at = models.DateTimeField(auto_now_add=True , null=True, blank=True)
     account_name = models.CharField(max_length=255)
     account_id = models.CharField(max_length=255, null=True, blank=True ,unique=True)
     profile_picture_url = models.URLField(max_length=1000, null=True, blank=True)
@@ -118,34 +119,18 @@ class DeveloperAppAccount(models.Model):
     is_flagged = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
-    # Templates
-    image_template = models.OneToOneField(
-        'Template',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='image_account'
-    )
-    video_template = models.OneToOneField(
-        'Template',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='video_account'
-    )
-
     def __str__(self):
         return self.account_name
 
 
 
-
-
-class Template(models.Model):
-    TEMPLATE_CHOICES = [
+TEMPLATE_CHOICES = [
         ('image', 'Image'),
-        ('video', 'Reel'),
+        ('reel', 'Reel'),
+        ('story', 'Story'),
+        ('video', 'Video'),
     ]
+class Template(models.Model):
     name = models.CharField(max_length=255)
     template_type = models.CharField(max_length=10, choices=TEMPLATE_CHOICES)
     template_json = models.JSONField()  # Stores full template design
@@ -161,28 +146,42 @@ class Template(models.Model):
         return f"{self.template_type} template {self.id}"
     
 
-class TemplateConfiguration(models.Model):
-    template = models.OneToOneField(
-        Template,
+class AccountTemplate(models.Model):
+    account = models.ForeignKey(
+        DeveloperAppAccount,
         on_delete=models.CASCADE,
-        related_name='configuration'
+        related_name='account_templates'
+    )
+    template = models.ForeignKey(
+        Template,
+        on_delete=models.SET_NULL,  # 👈 important
+        null=True,
+        blank=True
+    )
+    template_type = models.CharField(max_length=10, choices=TEMPLATE_CHOICES)
+
+    class Meta:
+        unique_together = ('account', 'template_type')
+
+
+class AccountTemplateConfiguration(models.Model):
+    account = models.ForeignKey(
+        DeveloperAppAccount,
+        on_delete=models.CASCADE,
+        related_name='template_configurations'
     )
 
-    # Flexible key-value config for features (caption, hashtags, audio, etc.)
+    template_type = models.CharField(max_length=10, choices=TEMPLATE_CHOICES)
+
     configuration = models.JSONField(default=dict)
     # Example:
     # {
-    #   "caption": true,
-    #   "hashtags": true,
-    #   "thumbnail": "thumb_123",
-    #   "location": {"lat": 40.7128, "lng": -74.0060},
-    #   "priority_queue": false
+    #   "default_caption": "Hello world",
+    #   "default_hashtags": ["#fun", "#ai"]
     # }
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"Configuration for template {self.template.id}"
-
-
+    class Meta:
+        unique_together = ('account', 'template_type')

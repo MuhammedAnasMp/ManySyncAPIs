@@ -487,3 +487,29 @@ class InstagramWebhookView(APIView):
             requests.post(url, json=payload, params=params)
         except Exception as e:
             print("Send message error:", str(e))
+
+from rest_framework import viewsets
+from .models import Template, AccountTemplate, AccountTemplateConfiguration
+from .serializers import TemplateSerializer, AccountTemplateSerializer, AccountTemplateConfigurationSerializer
+
+class TemplateViewSet(viewsets.ModelViewSet):
+    queryset = Template.objects.all()
+    serializer_class = TemplateSerializer
+
+class AccountTemplateViewSet(viewsets.ModelViewSet):
+    serializer_class = AccountTemplateSerializer
+    def get_queryset(self):
+        qs = AccountTemplate.objects.all()
+        account = self.request.query_params.get('account')
+        if account:
+            qs = qs.filter(account_id=account)
+        return qs
+
+class AccountTemplateConfigurationViewSet(viewsets.ModelViewSet):
+    serializer_class = AccountTemplateConfigurationSerializer
+    def get_queryset(self):
+        qs = AccountTemplateConfiguration.objects.all()
+        account = self.request.query_params.get('account')
+        if account:
+            qs = qs.filter(account_id=account)
+        return qs

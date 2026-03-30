@@ -1,6 +1,9 @@
 from django.db import models
 from apps.base import BaseModel
 from django.utils import timezone
+from django.conf import settings
+
+User = settings.AUTH_USER_MODEL
 class PlatformAccount(BaseModel):
     workspace = models.ForeignKey('workspaces.Workspace', on_delete=models.CASCADE, related_name='platform_accounts')
     platform = models.CharField(max_length=50) # e.g., 'meta', 'youtube'
@@ -100,24 +103,86 @@ class DeveloperApp(BaseModel):
     def __str__(self):
         return f"{self.app_name} ({self.platform})"
 
-class DeveloperAppAccount(BaseModel):
+class DeveloperAppAccount(models.Model):
     developer_app = models.ForeignKey(
         DeveloperApp,
         on_delete=models.CASCADE,
         related_name='associated_accounts'
     )
-
     account_name = models.CharField(max_length=255)
     account_id = models.CharField(max_length=255, null=True, blank=True ,unique=True)
-
     profile_picture_url = models.URLField(max_length=1000, null=True, blank=True)
     access_token = models.TextField(null=True, blank=True)
-
-    # 🔑 Handshake identity
     psid = models.CharField(max_length=255, null=True, blank=True, unique=True)
-
-    # 🔐 Status flags
     is_verified = models.BooleanField(default=False)
     is_flagged = models.BooleanField(default=False)
-
     is_active = models.BooleanField(default=True)
+
+    # Templates
+    image_template = models.OneToOneField(
+        'Template',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='image_account'
+    )
+    video_template = models.OneToOneField(
+        'Template',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='video_account'
+    )
+
+    def __str__(self):
+        return self.account_name
+
+
+
+
+
+class Template(models.Model):
+    TEMPLATE_CHOICES = [
+        ('image', 'Image'),
+        ('video', 'Reel'),
+    ]
+    name = models.CharField(max_length=255)
+    template_type = models.CharField(max_length=10, choices=TEMPLATE_CHOICES)
+    template_json = models.JSONField()  # Stores full template design
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="templates")
+    is_public = models.BooleanField(default=False)
+    parent_template = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL
+    )
+
+    def __str__(self):
+        return f"{self.template_type} template {self.id}"
+    
+
+class TemplateConfiguration(models.Model):
+    template = models.OneToOneField(
+        Template,
+        on_delete=models.CASCADE,
+        related_name='configuration'
+    )
+
+    # Flexible key-value config for features (caption, hashtags, audio, etc.)
+    configuration = models.JSONField(default=dict)
+    # Example:
+    # {
+    #   "caption": true,
+    #   "hashtags": true,
+    #   "thumbnail": "thumb_123",
+    #   "location": {"lat": 40.7128, "lng": -74.0060},
+    #   "priority_queue": false
+    # }
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Configuration for template {self.template.id}"
+
+

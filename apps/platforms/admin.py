@@ -1,5 +1,5 @@
-from django.contrib import admin
-from .models import PlatformAccount, ApiUsageLog, Webhook, DeveloperApp, DeveloperAppAccount
+from django.contrib import admin 
+from .models import PlatformAccount, ApiUsageLog, Webhook, DeveloperApp, DeveloperAppAccount ,Template ,TemplateConfiguration
 
 @admin.register(PlatformAccount)
 class PlatformAccountAdmin(admin.ModelAdmin):
@@ -27,6 +27,15 @@ class DeveloperAppAdmin(admin.ModelAdmin):
 
 @admin.register(DeveloperAppAccount)
 class DeveloperAppAccountAdmin(admin.ModelAdmin):
-    list_display = ('account_name', 'developer_app', 'is_active', 'created_at')
+    list_display = ('account_name', 'developer_app', 'is_active')
     list_filter = ('developer_app', 'is_active')
     search_fields = ('account_name', 'developer_app__app_name')
+
+
+@admin.register(Template)
+class TemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'created_by', 'created_at', 'template_type')
+
+@admin.register(TemplateConfiguration)
+class TemplateConfigurationAdmin(admin.ModelAdmin):
+    list_display = ('template', 'configuration', 'created_at', 'updated_at')

@@ -1,0 +1,50 @@
+{
+  "templateType": "image",
+  "bgColor": "#000000",
+  "objects": [
+    {
+      "id": "5690df4f240b4bd2",
+      "type": "image",
+      "x": 16,
+      "y": 132,
+      "width": 373,
+      "height": 373,
+      "rotation": 0,
+      "opacity": 1,
+      "visible": true,
+      "locked": false,
+      "deletable": false,
+      "src": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&auto=format&fit=crop",
+      "borderRadius": 0,
+      "brightness": 100,
+      "contrast": 100,
+      "saturate": 100,
+      "blur": 0,
+      "blendMode": "normal",
+      "crop": null,
+      "loading": false,
+      "name": "Main Image"
+    },
+    {
+      "id": "534cbac52bd544fd",
+      "type": "color",
+      "x": 50.00000226056122,
+      "y": 254.9999902513299,
+      "width": 283.82367528058046,
+      "height": 170.29420516834833,
+      "rotation": 0,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "deletable": true,
+      "color": "#6366f1",
+      "borderRadius": 14,
+      "blur": 19,
+      "glow": 0,
+      "glowColor": "#6366f1",
+      "blendMode": "normal",
+      "noColor": true,
+      "name": "Color Block"
+    }
+  ]
+}

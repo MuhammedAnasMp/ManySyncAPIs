@@ -401,7 +401,7 @@ class InstagramWebhookView(APIView):
                         else:
                             self.send_message(
                                 sender_id,
-                                "Please follow our Instagram page first, then type enter the code ."
+                                "👉 Follow us on Instagram:\nhttps://www.instagram.com/manysync/\n\n After following, please enter the code."
                             )
                         
                     else:

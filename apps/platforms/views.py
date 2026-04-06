@@ -11,9 +11,12 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from .utils import check_if_follows
 from django.db import IntegrityError
+from django.core.cache import cache
+import time
+from datetime import datetime
+from .utils import upload_reel
 
-
-
+from threading import Thread
 class PlatformAccountViewSet(viewsets.ModelViewSet):
     serializer_class = PlatformAccountSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -126,7 +129,7 @@ class PlatformAccountViewSet(viewsets.ModelViewSet):
         
         return Response(PlatformAccountSerializer(account).data)
 
-    def _refresh_instagram(self, account):
+    def _refresh_instagram(self,  account):
         """
         Refreshes Instagram account data. 
         Note: Basic Display API is deprecated. This implementation attempts to use 
@@ -250,6 +253,48 @@ class DeveloperAppViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return DeveloperApp.objects.filter(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        # Spawn a background thread to quietly refresh expiring Meta/Instagram profile URLs
+        import threading
+        def update_profiles(user_id):
+            import requests
+            accounts = DeveloperAppAccount.objects.filter(developer_app__user_id=user_id)
+            for acc in accounts:
+                if acc.access_token:
+                    # Fetch latest profile picture and username
+                    url = "https://graph.instagram.com/v25.0/me"
+                    params = {
+                        "fields": "id,username,profile_picture_url", 
+                        "access_token": acc.access_token
+                    }
+                    try:
+                        res = requests.get(url, params=params, timeout=10)
+                        if res.status_code == 200:
+                            data = res.json()
+                            save_needed = False
+                            
+                            new_username = data.get('username')
+                            if new_username and new_username != acc.account_name:
+                                acc.account_name = new_username
+                                save_needed = True
+                                
+                            new_pic = data.get('profile_picture_url')
+                            if new_pic and new_pic != acc.profile_picture_url:
+                                acc.profile_picture_url = new_pic
+                                save_needed = True
+                                
+                            if save_needed:
+                                acc.save(update_fields=['account_name', 'profile_picture_url'])
+                    except Exception as e:
+                        print(f"Error refreshing profile for {acc.account_name}: {e}")
+
+        # Start thread
+        t = threading.Thread(target=update_profiles, args=(request.user.id,))
+        t.start()
+        
+        # Return response without blocking
+        return super().list(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
@@ -259,6 +304,26 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return DeveloperAppAccount.objects.filter(developer_app__user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def generate_handshake(self, request, pk=None):
+        import uuid
+        import json
+        account = self.get_object()
+        
+        # Verify the user owns this app
+        if getattr(account.developer_app, 'user', None) != request.user:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+            
+        # Generate a short unique code starting with aoea
+        code = f"aoea{str(uuid.uuid4())[:8].replace('-', '')}"
+        
+        # Save to cache with a 10 min TTL
+        key = f"handshake:{code}"
+        data = {"account_id": account.pk}
+        cache.set(key, json.dumps(data), timeout=600)
+        
+        return Response({"code": code}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         access_token = request.data.get('access_token')
@@ -348,10 +413,6 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
 
 
 
-
-r = redis.Redis(host='localhost', port=6379, db=0)
-
-
 class InstagramWebhookView(APIView):
 
     # 🔐 Webhook verification (Meta setup)
@@ -368,6 +429,7 @@ class InstagramWebhookView(APIView):
         return HttpResponse("Verification failed", status=403)
 
     # 📩 Handle incoming messages
+
     def post(self, request):
         try:
             payload = request.data
@@ -387,26 +449,53 @@ class InstagramWebhookView(APIView):
 
                     sender_id = messaging.get("sender", {}).get("id")
                     message = messaging.get("message", {})
-                    text = message.get("text", "").strip()
 
-                    if not sender_id or not text:
+                    if not sender_id or not message:
                         continue
 
-                    # ✅ Check if message starts with "aoea"
-                    if text.lower().startswith("aoea"):
-                        print(f"✅ Flag detected from {sender_id}: {text}")
-                        follows = check_if_follows(sender_id, "IGAAUN0phDYERBZAGE1NHBzRXRLWEFPT0EyTEkxVktMZAndRTW1NNzRFSGZARMEN1a3ZA2bHduam93cjYzY0J2SDBiRWhXcjdmWU91LWNTMmFBR25wZA2pkUUNFNi1SWnozVmhRRnh1S21CUjlKTkNZAUndwU1pn")
-                        if follows:
-                            self.handle_handshake(sender_id, text)
+                    # 🔹 1. Handle TEXT messages
+                    code = message.get("text", "").strip()
+
+                    if code:
+                        if code.lower().startswith("aoea"):
+                            print(f"✅ Flag detected from {sender_id}: {code}")
+                            username, follows = check_if_follows(sender_id)
+
+                            if follows:
+                                self.handle_handshake(sender_id, code, username)
+                            else:
+                                self.send_message(
+                                    sender_id,
+                                    "👉 Follow us on Instagram:\nhttps://www.instagram.com/manysync/\n\n After following, please enter the code."
+                                )
                         else:
-                            self.send_message(
-                                sender_id,
-                                "👉 Follow us on Instagram:\nhttps://www.instagram.com/manysync/\n\n After following, please enter the code."
-                            )
-                        
-                    else:
-                        print(f"📩 Normal message from {sender_id}: {text}")
-                        
+                            print(f"📩 Normal text message {sender_id}: {code}")
+
+                    # 🔹 2. Handle ATTACHMENTS (Reels, media, etc.)
+                    attachments = message.get("attachments", [])
+
+                    for attachment in attachments:
+                        att_type = attachment.get("type")
+
+                        # 🎬 Handle Instagram Reel
+                        if att_type == "ig_reel":
+                            reel_payload = attachment.get("payload", {})
+                            reel_id = reel_payload.get("reel_video_id")
+                            reel_title = reel_payload.get("title")
+                            reel_url = reel_payload.get("url")
+
+                            print(f"🎬 Reel received from {sender_id}")
+                            print(f"   Reel ID: {reel_id}")
+                            print(f"   Title: {reel_title}")
+                            print(f"   URL: {reel_url}")
+                            account = DeveloperAppAccount.objects.get(psid=sender_id)
+                            Thread(target=upload_reel, args=(reel_url, reel_title, account.access_token, account.account_id)).start()
+
+                          
+
+                        # (Optional) Handle other attachment types
+                        else:
+                            print(f"📎 Other attachment type: {att_type}")
 
             return JsonResponse({"status": "ok"}, status=200)
 
@@ -414,27 +503,34 @@ class InstagramWebhookView(APIView):
             print("Webhook error:", str(e))
             return JsonResponse({"error": "server error"}, status=500)
 
-    # 🔑 Handshake logic
-    def handle_handshake(self, psid, text):
-        key = f"handshake:{text}"
-        data = r.get(key)
-
+        # 🔑 Handshake logic
+    def handle_handshake(self, psid, code, account_name):
+        print(f"account_name {account_name} and psid {psid} and code {code}")
+        key = f"handshake:{code}"
+        data = cache.get(key)
         if not data:
             self.handle_invalid_code(psid)
             return
 
         data = json.loads(data)
         account_id = data.get("account_id")
-
         try:
             account = DeveloperAppAccount.objects.get(id=account_id)
-
-            # 🚨 Already linked to another PSID
-            if account.psid and account.psid != psid:
+            print("account", account.psid)
+            print("account.psid", account.psid)
+            print("token owner", account.account_name)
+            print("unknown user", account_name)
+            if account.psid and account.account_name == account_name:
                 account.is_flagged = True
                 account.save()
-
                 self.send_message(psid, "⚠️ This account is already linked.")
+                return
+            elif  account.account_name != account_name :
+                account.is_flagged = True
+                account.save()
+                self.handle_invalid_code(psid, "⚠️ This token is not for this account. Only @" + account.account_name + " can use this token.")  
+                # self.send_message(psid, "⚠️ This token is not for this account. Only @" + account.account_name + " can use this token.")
+
                 return
 
             # ✅ Success
@@ -444,29 +540,62 @@ class InstagramWebhookView(APIView):
             account.save()
 
             # 🧹 delete used code
-            r.delete(key)
 
-            self.send_message(psid, "✅ Account successfully connected!")
+            cache.delete(key)
+
+            self.send_message(psid, "✅ Account connected!")
 
         except DeveloperAppAccount.DoesNotExist:
+            print("Account does not exist")
             self.handle_invalid_code(psid)
 
     # ❌ Invalid / expired code
-    def handle_invalid_code(self, psid):
-        self.send_message(psid, "❌ Invalid or expired code.")
+    def handle_invalid_code(self, psid, message=None):
 
-        # track failures
+        block_key = f"blocked:{psid}"
         fail_key = f"fail:{psid}"
-        r.incr(fail_key)
-        r.expire(fail_key, 600)
+        
+        if cache.get(block_key):
+            print("Blocked Key >>>>>>>>>>>>>>>>>>>>>>>", block_key)
+            print("Fail Key >>>>>>>>>>>>>>>>>>>>>>>", fail_key)
+            # print the time 
+            print("next try after time : ", datetime.fromtimestamp(time.time() + cache.ttl(block_key)))# show time 
+            return
 
-        attempts = int(r.get(fail_key) or 0)
+        # ❌ Invalid attempt
+        try:
+            attempts = cache.incr(fail_key)
+        except ValueError:
+            cache.set(fail_key, 1, timeout=600*6)  # 1 hour window
+            attempts = 1
 
+        print("Attempts:", attempts)
+
+        # 🚫 If reached limit → block + send message ONCE
         if attempts >= 3:
+            print("Account flagged & blocked >>>>>>>>>>>>>>>>>>>>>>>")
+
+            # Set block for 1 hour
+            cache.set(block_key, True, timeout=3600)
+
+            # Reset counter
+            cache.delete(fail_key)
+
+            # Flag in DB
             account = DeveloperAppAccount.objects.filter(psid=psid).first()
-            if account:
+            if account and not account.is_flagged:
                 account.is_flagged = True
                 account.save()
+
+            # ✅ Send block message ONLY here
+            self.send_message(psid, "🚫 Too many failed attempts. You are blocked for 1 hour.")
+            return
+
+        # ❌ Only send invalid message if NOT blocked yet
+        if message:
+            self.send_message(psid, message)
+        else:
+            self.send_message(psid, "❌ Invalid or expired code.")
 
     # 💬 Send message back
     def send_message(self, psid, text):
@@ -493,8 +622,27 @@ from .models import Template, AccountTemplate, AccountTemplateConfiguration
 from .serializers import TemplateSerializer, AccountTemplateSerializer, AccountTemplateConfigurationSerializer
 
 class TemplateViewSet(viewsets.ModelViewSet):
-    queryset = Template.objects.all()
     serializer_class = TemplateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Template.objects.all()
+
+        market_place = self.request.query_params.get('market_place')
+        my_template = self.request.query_params.get('my_template')
+
+        if market_place == 'true':
+            qs = qs.filter(is_public=True)
+        elif my_template == 'true':
+            qs = qs.filter(created_by=user)
+        else:
+            qs = qs.filter(models.Q(is_public=True) | models.Q(created_by=user))
+            
+        return qs
 
 class AccountTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = AccountTemplateSerializer

@@ -109,7 +109,7 @@ class DeveloperAppAccount(models.Model):
         on_delete=models.CASCADE,
         related_name='associated_accounts'
     )
-    created_at = models.DateTimeField(auto_now_add=True , null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     account_name = models.CharField(max_length=255)
     account_id = models.CharField(max_length=255, null=True, blank=True ,unique=True)
     profile_picture_url = models.URLField(max_length=1000, null=True, blank=True)

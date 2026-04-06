@@ -1,27 +1,22 @@
 from .models import PlanFeature, PlanQuota, Usage
 
-def has_feature(user, feature_code):
-    """Check if a user's plan has a specific feature enabled."""
-    if not hasattr(user, 'subscription') or not user.subscription.plan:
-        return False
-        
-    return PlanFeature.objects.filter(
-        plan=user.subscription.plan,
-        feature__code=feature_code,
-        enabled=True
-    ).exists()
+
 
 def get_quota(user, key):
-    """Get the numeric quota limit for a specific key based on user's plan."""
+    """Get the numeric quota limit for a specific PlanKey object."""
     if not hasattr(user, 'subscription') or not user.subscription.plan:
         return 0
-        
+
+
     quota = PlanQuota.objects.filter(
         plan=user.subscription.plan,
-        key=key
+        key__name=key  # Pass the PlanKey instance
     ).first()
-    
+    if key == "posts_per_month":
+        return quota.value + user.subscription.credit
     return quota.value if quota else 0
+
+
 
 def can_post(user):
     """Check if the user has enough quota to post."""
@@ -29,6 +24,7 @@ def can_post(user):
     usage, created = Usage.objects.get_or_create(user=user, key="posts_per_month")
     
     return usage.used < quota
+
 
 def consume_post(user):
     """Consume a post action, deducting from quota first, fallback to credits."""

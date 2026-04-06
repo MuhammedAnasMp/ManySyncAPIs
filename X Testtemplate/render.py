@@ -14,7 +14,7 @@ from moviepy import (
 from moviepy.video.VideoClip import VideoClip
 import tempfile
 
-QUALITY_LEVEL = 5  # 1 to 5 (1 = fast testing, 5 = highest quality export)
+QUALITY_LEVEL = 3  # 1 to 5 (1 = fast testing, 5 = highest quality export)
 
 if QUALITY_LEVEL == 5:
     SCALE_FACTOR = 1080 / 405.0

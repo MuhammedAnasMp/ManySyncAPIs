@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Plan, Feature, PlanFeature, PlanQuota, Subscription, Usage, Credit, Transaction
+from .models import Plan, Feature, PlanFeature, PlanQuota, Subscription, Usage, Transaction
 
 class PlanFeatureInline(admin.TabularInline):
     model = PlanFeature
@@ -8,6 +8,9 @@ class PlanFeatureInline(admin.TabularInline):
 class PlanQuotaInline(admin.TabularInline):
     model = PlanQuota
     extra = 1
+
+
+    
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
@@ -26,9 +29,6 @@ class SubscriptionAdmin(admin.ModelAdmin):
 class UsageAdmin(admin.ModelAdmin):
     list_display = ('user', 'key', 'used', 'period_start')
 
-@admin.register(Credit)
-class CreditAdmin(admin.ModelAdmin):
-    list_display = ('user', 'balance')
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):

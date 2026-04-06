@@ -20,7 +20,7 @@ class DeveloperAppAccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DeveloperAppAccount
-        fields = ['id', 'developer_app', 'account_name', 'account_id', 'profile_picture_url', 'access_token', 'is_active', 'created_at']
+        fields = ['id', 'developer_app', 'account_name', 'account_id', 'profile_picture_url', 'access_token', 'is_active', 'is_verified', 'is_flagged', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 class DeveloperAppSerializer(serializers.ModelSerializer):
@@ -34,9 +34,15 @@ class DeveloperAppSerializer(serializers.ModelSerializer):
 from .models import Template, AccountTemplate, AccountTemplateConfiguration
 
 class TemplateSerializer(serializers.ModelSerializer):
+    used_by_accounts = serializers.SerializerMethodField()
+
     class Meta:
         model = Template
         fields = '__all__'
+        read_only_fields = ['created_by']
+
+    def get_used_by_accounts(self, obj):
+        return list(obj.accounttemplate_set.values_list('account__account_name', flat=True))
 
 class AccountTemplateSerializer(serializers.ModelSerializer):
     class Meta:

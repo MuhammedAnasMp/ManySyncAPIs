@@ -12,40 +12,15 @@ henaf79514@kaoing.com
 
 
 
-🔷 What You Can Do With Proper Setup
-
-With Page Token + Instagram Business ID you can:
-
-✅ Instagram
-
-Publish posts
-
-Publish reels
-
-Read comments
-
-Reply to comments
-
-Send/receive DMs
-
-Get insights
-
-Get mentions
-
-Webhooks for messages & comments
-
-✅ Facebook Page
-
-Post content
-
-Reply to comments
-
-Read messages
-
-Get insights
-
-Webhooks
 
 
 
-User → Facebook Login → Page → Instagram Business → Webhooks
+plan = Plan.objects.get(name="Pro")
+
+print("Features:")
+for pf in plan.features.all():
+    print(f"- {pf.feature.code}: {'Enabled' if pf.enabled else 'Disabled'}")
+
+print("\nQuotas:")
+for pq in plan.quotas.all():
+    print(f"- {pq.key.name}: {pq.value}")

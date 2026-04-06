@@ -29,10 +29,16 @@ class PlanFeature(models.Model):
 
     def __str__(self):
         return f"{self.plan.name} - {self.feature.code}: {'Enabled' if self.enabled else 'Disabled'}"
+class PlanKey(models.Model):
+    name = models.CharField(max_length=50)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.name
 
 class PlanQuota(models.Model):
     plan = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name="quotas")
-    key = models.CharField(max_length=50)
+    key = models.ForeignKey(PlanKey, on_delete=models.CASCADE, related_name="plans")
     value = models.IntegerField()
 
     class Meta:
@@ -47,6 +53,7 @@ class Subscription(models.Model):
     start_date = models.DateTimeField(default=timezone.now)
     end_date = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    credit = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.user} - {self.plan.name if self.plan else 'No Plan'}"

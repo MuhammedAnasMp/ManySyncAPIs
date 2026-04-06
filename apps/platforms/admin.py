@@ -27,7 +27,7 @@ class DeveloperAppAdmin(admin.ModelAdmin):
 
 @admin.register(DeveloperAppAccount)
 class DeveloperAppAccountAdmin(admin.ModelAdmin):
-    list_display = ('account_name', 'developer_app', 'is_active')
+    list_display = ('account_name', 'account_id','developer_app', 'is_active' ,"is_verified" ,"is_flagged", 'psid' )
     list_filter = ('developer_app', 'is_active')
     search_fields = ('account_name', 'developer_app__app_name')
 

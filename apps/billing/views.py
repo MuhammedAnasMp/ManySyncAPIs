@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.conf import settings
-from .models import Plan, Subscription, Credit, PlanFeature, PlanQuota, Usage, Transaction
+from .models import Plan, Subscription, PlanFeature, PlanQuota, Usage, Transaction 
 from .utils import can_post, get_quota
 import razorpay
 import json
@@ -20,7 +20,7 @@ class PlanListView(APIView):
         data = []
         for p in plans:
             features = p.features.filter(enabled=True).values_list('feature__code', flat=True)
-            quotas = {q.key: q.value for q in p.quotas.all()}
+            quotas = {q.key.name: q.value for q in p.quotas.all()}
             data.append({
                 'id': p.id,
                 'name': p.name,
@@ -124,40 +124,78 @@ class VerifyPaymentView(APIView):
         currency = order.get('currency', 'INR')
         
         item_name = "Unknown Item"
-        
+        posts_to_add = 0
+
+        now = timezone.now()
+        sub = Subscription.objects.filter(user=request.user).first()
+
         if plan_id:
             plan = Plan.objects.get(id=plan_id)
             item_name = plan.name
-            
-            now = timezone.now()
-            sub = Subscription.objects.filter(user=request.user).first()
-            
-            if sub and sub.plan == plan and sub.is_active and sub.end_date and sub.end_date > now:
-                # Renew existing plan by adding 30 days
-                new_start = sub.start_date
-                new_end = sub.end_date + timedelta(days=30)
+
+            if sub:
+                if sub.plan != plan:
+                    # Changing plan
+                    print(f"DEBUG: Changing plan from {sub.plan} to {plan}")
+                    sub.plan = plan
+                    sub.start_date = now
+                    sub.end_date = now + timedelta(days=30)
+                    sub.is_active = True
+                    sub.credit = 0
+                    sub.save()
+                elif sub.is_active and sub.end_date and sub.end_date > now:
+                    # Renewing same plan
+                    sub.end_date += timedelta(days=30)
+                    print(f"DEBUG: Renewing same plan, new end date={sub.end_date}")
+                    sub.save()
+                else:
+                    # Reactivating expired plan
+                    sub.start_date = now
+                    sub.end_date = now + timedelta(days=30)
+                    sub.is_active = True
+                    sub.plan = plan
+                    sub.credit = 0
+                    sub.save()
+                    print(f"DEBUG: Reactivating plan {plan}, start={sub.start_date}, end={sub.end_date}")
             else:
-                # New plan or changing plan
-                new_start = now
-                new_end = now + timedelta(days=30)
-                
-            Subscription.objects.update_or_create(
-                user=request.user,
-                defaults={
-                    'plan': plan, 
-                    'is_active': True,
-                    'start_date': new_start,
-                    'end_date': new_end
-                }
-            )
-            
+                # No subscription exists
+                sub = Subscription.objects.create(
+                    user=request.user,
+                    plan=plan,
+                    is_active=True,
+                    start_date=now,
+                    end_date=now + timedelta(days=30),
+                    credit=0
+                )
+
+                print(f"DEBUG: Created new subscription with plan {plan}, start={sub.start_date}, end={sub.end_date}")
+
         elif addon:
             posts_to_add = int(notes.get('posts', 0))
-            item_name = f"{posts_to_add} posts add-on"
-            credit, _ = Credit.objects.get_or_create(user=request.user)
-            credit.balance += posts_to_add
-            credit.save()
             
+            if addon == 'addon_50':
+                item_name = '100 posts Add-on'
+            elif addon == 'addon_90':
+                item_name = '250 posts Add-on'
+            else:
+                item_name = f'{posts_to_add} posts Add-on'
+                
+            print(f"DEBUG: Adding addon posts={posts_to_add}")
+            if sub:
+                sub.credit += posts_to_add
+                sub.save()
+                print(f"DEBUG: Updated subscription credit={sub.credit}")
+            else:
+                sub = Subscription.objects.create(
+                    user=request.user,
+                    plan=None,
+                    is_active=False,
+                    credit=posts_to_add
+                )
+                print(f"DEBUG: Created new subscription with credit={sub.credit}")
+        sub.save()
+        print(f"DEBUG: Subscription updated: plan={sub.plan}, start={sub.start_date}, end={sub.end_date}, credit={sub.credit}")
+        # Record transaction
         if plan_id or addon:
             Transaction.objects.create(
                 user=request.user,
@@ -194,7 +232,7 @@ class UserSubscriptionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        try:
+        # try:
             sub = request.user.subscription
             if not sub.plan or not sub.is_active:
                 return Response({'has_plan': False})
@@ -203,9 +241,8 @@ class UserSubscriptionView(APIView):
             
             usage_posts = Usage.objects.filter(user=request.user, key='posts_per_month').first()
             posts_used = usage_posts.used if usage_posts else 0
-            
-            credit_obj = Credit.objects.filter(user=request.user).first()
-            credits_available = credit_obj.balance if credit_obj else 0
+
+            credits_available = sub.credit
             
             return Response({
                 'has_plan': True,
@@ -225,5 +262,5 @@ class UserSubscriptionView(APIView):
                     'can_post': can_post(request.user)
                 }
             })
-        except Exception:
-            return Response({'has_plan': False})
+        # except Exception:
+            # return Response({'has_plan': False})

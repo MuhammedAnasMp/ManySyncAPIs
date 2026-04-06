@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from apps.billing.models import Plan, Feature, PlanFeature, PlanQuota
+from apps.billing.models import Plan, Feature, PlanFeature, PlanQuota ,PlanKey
 
 class Command(BaseCommand):
     help = 'Seeds initial billing plans and features into the database'
@@ -14,10 +14,11 @@ class Command(BaseCommand):
                 {'code': 'advanced_caption', 'description': 'Advanced AI caption tools'},      
                 {'code': 'custom_audio', 'description': 'Custom audio control'},
                 {'code': 'share_to_post', 'description': 'Share to Post functionality'},
-            {'code': 'template_image_posting', 'description': 'Template image posting'},
-            {'code': 'template_reel_posting', 'description': 'Template reel posting'},
-            {'code': 'template_story_posting', 'description': 'Template story posting'},
-            {'code': 'template_video_posting', 'description': 'Template video posting'}    
+                {'code': 'template_image_posting', 'description': 'Template image posting'},
+                {'code': 'template_reel_posting', 'description': 'Template reel posting'},
+                {'code': 'template_story_posting', 'description': 'Template story posting'},
+                {'code': 'template_video_posting', 'description': 'Template video posting'}   ,
+                {'code': 'intros_outros', 'description': 'Intros and Outros'} 
         ]
         
         feature_objs = {}
@@ -29,39 +30,77 @@ class Command(BaseCommand):
             {
                 'name': 'Free',
                 'price': 0.00,
-                'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 50, 'posts_per_day': 2},
+                'quotas': [
+                    {'key': 'apps_limit', 'value': 1},
+                    {'key': 'accounts_limit', 'value': 1},
+                    {'key': 'posts_per_month', 'value': 50},
+                    {'key': 'posts_per_day', 'value': 2},
+                ],
                 'features': ['caption', 'hashtags']    
             },
             {
                 'name': 'Starter',
                 'price': 149.00,
-                'quotas': {'apps_limit': 1, 'accounts_limit': 1, 'posts_per_month': 100, 'posts_per_day': 5},
+                'quotas': [
+                        {'key': 'apps_limit', 'value': 1},
+                        {'key': 'accounts_limit', 'value': 1},
+                        {'key': 'posts_per_month', 'value': 100},
+                        {'key': 'posts_per_day', 'value': 5},
+                    ],
                 'features': ['caption', 'hashtags']
             },
             {
                 'name': 'Creator',
                 'price': 399.00,
-                'quotas': {'apps_limit': 1, 'accounts_limit': 3, 'posts_per_month': 500, 'posts_per_day': 10},
+                'quotas': [
+                        {'key': 'apps_limit', 'value': 1},
+                        {'key': 'accounts_limit', 'value': 3},
+                        {'key': 'posts_per_month', 'value': 500},
+                        {'key': 'posts_per_day', 'value': 10},
+                    ],
                 'features': ['caption', 'hashtags', 'thumbnail', 'location', 'creator_credit', 'share_to_post']
             },
             {
                 'name': 'Pro',
                 'price': 999.00,
-                'quotas': {'apps_limit': 100, 'accounts_limit': 10, 'posts_per_month': 1500, 'posts_per_day': 20},
+                'quotas': [
+                        {'key': 'apps_limit', 'value': 100},
+                        {'key': 'accounts_limit', 'value': 10},
+                        {'key': 'posts_per_month', 'value': 1500},
+                        {'key': 'posts_per_day', 'value': 20},
+                    ],
                 'features': ['caption', 'hashtags', 'thumbnail', 'location', 'creator_credit', 'advanced_caption', 'share_to_post']
             }
         ]
         
+      
+
+        # Assume feature_objs is a dict: {'caption': Feature_obj, 'hashtags': Feature_obj, ...}
         for p in plans_data:
-            plan, created = Plan.objects.get_or_create(name=p['name'], defaults={'price': p['price'], 'is_active': True})
+            plan, created = Plan.objects.get_or_create(
+                name=p['name'],
+                defaults={'price': p['price'], 'is_active': True}
+            )
             if not created:
                 plan.price = p['price']
                 plan.save()
-            
-            for k, v in p['quotas'].items():
-                PlanQuota.objects.update_or_create(plan=plan, key=k, defaults={'value': v})
-                
+
+            for quota in p['quotas']:
+                key_obj, _ = PlanKey.objects.get_or_create(name=quota['key'])
+                PlanQuota.objects.update_or_create(
+                    plan=plan,
+                    key=key_obj,
+                    defaults={'value': quota['value']}
+                )
+
+            # Create features
             for feature_code in p['features']:
-                PlanFeature.objects.update_or_create(plan=plan, feature=feature_objs[feature_code], defaults={'enabled': True})
-                
+                PlanFeature.objects.update_or_create(
+                    plan=plan,
+                    feature=feature_objs[feature_code],
+                    defaults={'enabled': True}
+                )
+
+        print("✅ Plans, quotas, and features seeded successfully!")
+
         self.stdout.write(self.style.SUCCESS("Successfully seeded plans, features, and quotas!"))

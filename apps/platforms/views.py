@@ -264,7 +264,7 @@ class DeveloperAppViewSet(viewsets.ModelViewSet):
                     # Fetch latest profile picture and username
                     url = "https://graph.instagram.com/v25.0/me"
                     params = {
-                        "fields": "id,username,profile_picture_url", 
+                        "fields": "id,username,profile_picture_url,followers_count,follows_count,media_count", 
                         "access_token": acc.access_token
                     }
                     try:
@@ -283,8 +283,14 @@ class DeveloperAppViewSet(viewsets.ModelViewSet):
                                 acc.profile_picture_url = new_pic
                                 save_needed = True
                                 
+                            # Update metrics
+                            acc.followers_count = data.get('followers_count', acc.followers_count)
+                            acc.follows_count = data.get('follows_count', acc.follows_count)
+                            acc.media_count = data.get('media_count', acc.media_count)
+                            save_needed = True
+                                
                             if save_needed:
-                                acc.save(update_fields=['account_name', 'profile_picture_url'])
+                                acc.save(update_fields=['account_name', 'profile_picture_url', 'followers_count', 'follows_count', 'media_count'])
                     except Exception as e:
                         print(f"Error refreshing profile for {acc.account_name}: {e}")
 
@@ -331,18 +337,24 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
         account_name = "Unknown Account"
         account_id = ""
         profile_picture_url = ""
+        followers_count = 0
+        follows_count = 0
+        media_count = 0
         
         if access_token:
             try:
                 # Try Instagram Graph API first
                 url = "https://graph.instagram.com/me"
-                params = {"fields": "id,username,user_id,profile_picture_url", "access_token": access_token}
+                params = {"fields": "id,username,user_id,profile_picture_url,followers_count,follows_count,media_count", "access_token": access_token}
                 res = requests.get(url, params=params)
                 if res.status_code == 200:
                     data = res.json()
                     account_name = data.get('username', "Unknown Account")
                     account_id = data.get('user_id', "")
                     profile_picture_url = data.get('profile_picture_url', "")
+                    followers_count = data.get('followers_count', 0)
+                    follows_count = data.get('follows_count', 0)
+                    media_count = data.get('media_count', 0)
                 else:
                     # Fallback to Facebook Graph API
                     url_fb = "https://graph.facebook.com/me"
@@ -359,6 +371,9 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
                 account_name = "Unknown Account"
                 account_id = ""
                 profile_picture_url = ""
+                followers_count = 0
+                follows_count = 0
+                media_count = 0
 
         # Only proceed if both account_id and developer_app_id exist
         if account_id and developer_app_id:
@@ -388,7 +403,10 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
                     account_id=account_id,
                     account_name=account_name,
                     profile_picture_url=profile_picture_url,
-                    access_token=access_token
+                    access_token=access_token,
+                    followers_count=followers_count,
+                    follows_count=follows_count,
+                    media_count=media_count
                 )
             except IntegrityError:
                 # In case of a rare race condition
@@ -406,7 +424,10 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
         serializer.save(
             account_name=account_name,
             account_id=account_id,
-            profile_picture_url=profile_picture_url
+            profile_picture_url=profile_picture_url,
+            followers_count=followers_count,
+            follows_count=follows_count,
+            media_count=media_count
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 

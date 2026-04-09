@@ -118,6 +118,9 @@ class DeveloperAppAccount(models.Model):
     is_verified = models.BooleanField(default=False)
     is_flagged = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    followers_count = models.BigIntegerField(default=0)
+    follows_count = models.BigIntegerField(default=0)
+    media_count = models.BigIntegerField(default=0)
 
     def __str__(self):
         return self.account_name

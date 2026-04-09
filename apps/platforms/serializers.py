@@ -20,7 +20,7 @@ class DeveloperAppAccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DeveloperAppAccount
-        fields = ['id', 'developer_app', 'account_name', 'account_id', 'profile_picture_url', 'access_token', 'is_active', 'is_verified', 'is_flagged', 'created_at']
+        fields = ['id', 'developer_app', 'account_name', 'account_id', 'profile_picture_url', 'access_token', 'is_active', 'is_verified', 'is_flagged', 'followers_count', 'follows_count', 'media_count', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 class DeveloperAppSerializer(serializers.ModelSerializer):

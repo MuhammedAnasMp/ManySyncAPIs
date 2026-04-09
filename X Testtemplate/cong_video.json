@@ -1,0 +1,23 @@
+{
+    "caption": {
+        "mode": "custom",
+        "value": "Standard video post with intro and outro support. 📹"
+    },
+    "hashtags": {
+        "mode": "custom",
+        "value": ["video", "tutorial", "production"]
+    },
+    "custom_audio": {
+        "mode": "off",
+        "value": ""
+    },
+    "intros_outros": {
+        "mode": "custom",
+        "intro": "https://res.cloudinary.com/dyt8amitd/video/upload/v1775629294/mvmz4pct24y7i5igckrq.mp4",
+        "outro": ""
+    },
+    "creator_credit": {
+        "mode": "off",
+        "value": ""
+    }
+}

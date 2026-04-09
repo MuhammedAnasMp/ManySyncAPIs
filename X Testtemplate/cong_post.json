@@ -1,0 +1,26 @@
+{
+    "custom_audio": {
+        "mode": "trending",
+        "value": "",
+        "mix": 86
+    },
+    "creator_credit": {
+        "mode": "on",
+        "value": ""
+    },
+    "hashtags": {
+        "mode": "custom",
+        "value": [
+            "asdsdssdas",
+            "dsa",
+            "dasd",
+            "d",
+            "sad",
+            "asd"
+        ]
+    },
+    "caption": {
+        "mode": "custom",
+        "value": "thsu sdusdf sd sdsd sdifds fsd fsdifd fdf dfdfdfdf dd fd fdfd fsdf dsfsdf sdfsd sdfd"
+    }
+}

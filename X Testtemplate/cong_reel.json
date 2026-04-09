@@ -1,0 +1,33 @@
+{
+    "thumbnail": {
+        "mode": "custom",
+        "value": "https://res.cloudinary.com/dyt8amitd/image/upload/v1775663469/zs3ujfzfvrudwcf903uh.jpg"
+    },
+    "caption": {
+        "mode": "custom",
+        "value": "Check out this amazing reel! 🎬 #automation"
+    },
+    "hashtags": {
+        "mode": "custom",
+        "value": [
+            "reels",
+            "trending",
+            "ai",
+            "manysync"
+        ]
+    },
+    "custom_audio": {
+        "mode": "custom",
+        "value": "https://res.cloudinary.com/dyt8amitd/video/upload/v1775629250/p8evpttyxipxzm5im5e2.mp3",
+        "mix": 50
+    },
+    "intros_outros": {
+        "mode": "custom",
+        "intro": "https://res.cloudinary.com/dyt8amitd/video/upload/v1775629294/mvmz4pct24y7i5igckrq.mp4",
+        "outro": "https://res.cloudinary.com/dyt8amitd/video/upload/v1775629302/ugz2o4ns8nsivcx3wzqc.mp4"
+    },
+    "creator_credit": {
+        "mode": "on",
+        "value": "Many Sync AI"
+    }
+}

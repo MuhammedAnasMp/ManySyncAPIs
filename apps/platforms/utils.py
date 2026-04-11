@@ -1,5 +1,6 @@
 
 import requests,time,os,re,random
+from .renderer import render_video, render_thumbnail, render_image
 
 
 def check_if_follows(user_id):
@@ -83,6 +84,7 @@ def upload_temp(file_path):
     # tmpfiles.org is often more script-friendly than file.io lately
     url = 'https://tmpfiles.org/api/v1/upload'
     try:
+        print("file_path",file_path)
         with open(file_path, 'rb') as f:
             files = {'file': f}
             res = requests.post(url, files=files)
@@ -118,10 +120,64 @@ def clean_caption(caption):
 
 
 
-def upload_reel(reel_url_from_webhook, caption , access_token, user_id):
-    url = get_temp_public_url(reel_url_from_webhook , user_id)
+def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_json=None, configuration=None):
+    output_path = f"rendered_{user_id}_{random.randint(1, 1000000)}.mp4"
+    thumb_output_path = f"thumb_{user_id}_{random.randint(1, 1000000)}.png"
+    
+    url = None
+    cover_url = None
+    
+    # 1. Handle Rendering (Video)
+    if template_json:
+        print(f"🎨 Rendering reel with template for user {user_id}...")
+        try:
+            video_path = render_video(template_json, configuration or {}, reel_url_from_webhook, output_path)
+            url = upload_temp(video_path)
+            if os.path.exists(output_path):
+                os.remove(output_path)
+        except Exception as render_ex:
+            print(f"❌ Rendering failed: {render_ex}. Falling back to original video.")
+            url = get_temp_public_url(reel_url_from_webhook, user_id)
+    else:
+        url = get_temp_public_url(reel_url_from_webhook, user_id)
+
+    # 2. Handle Thumbnail
+    if configuration and "thumbnail" in configuration:
+        t_cfg = configuration["thumbnail"]
+        t_mode = t_cfg.get("mode", "off")
+        
+        if t_mode == "custom" and t_cfg.get("value"):
+            print(f"🖼️ Using custom thumbnail: {t_cfg['value']}")
+            cover_url = t_cfg["value"]
+        elif t_mode == "template" and template_json:
+            print("🖼️ Generating thumbnail from template...")
+            try:
+                thumb_path = render_thumbnail(template_json, configuration, reel_url_from_webhook, thumb_output_path)
+                if thumb_path:
+                    cover_url = upload_temp(thumb_path)
+                    if os.path.exists(thumb_output_path):
+                        os.remove(thumb_output_path)
+            except Exception as thumb_ex:
+                print(f"❌ Thumbnail generation failed: {thumb_ex}")
+
+    if not url:
+        print("❌ Failed to get a public URL for the video.")
+        return None
+
     try:
+        # Step 0: Determine caption from configuration if available
+        if configuration and configuration.get("caption", {}).get("mode") == "custom":
+            caption = configuration["caption"].get("value", caption)
+        
+        # Add hashtags if available
+        if configuration and configuration.get("hashtags", {}).get("mode") == "custom":
+            tags = configuration["hashtags"].get("value", [])
+            if tags:
+                tag_string = " ".join([f"#{t.strip().lstrip('#')}" for t in tags if t.strip()])
+                caption = f"{caption}\n\n{tag_string}"
+
         caption = clean_caption(caption)
+        
         # STEP 1: Create media container
         create_url = f"https://graph.instagram.com/v25.0/{user_id}/media"
         create_payload = {
@@ -132,6 +188,10 @@ def upload_reel(reel_url_from_webhook, caption , access_token, user_id):
             "thumb_offset": "2000",
             "access_token": access_token
         }
+        
+        if cover_url:
+            print(f"📎 Adding cover_url: {cover_url}")
+            create_payload["cover_url"] = cover_url
 
         
         create_res = requests.post(create_url, data=create_payload)
@@ -173,4 +233,145 @@ def upload_reel(reel_url_from_webhook, caption , access_token, user_id):
         return None
     except Exception as ex:
         print("Error:", ex)
+        return None
+
+def upload_post(image_url_from_webhook, caption, access_token, user_id, template_json=None, configuration=None):
+    output_path = f"rendered_post_{user_id}_{random.randint(1, 1000000)}.png"
+    
+    # Check if we should render as a reel even if it's a post, based on ENV
+    from django.conf import settings
+    render_mode_env = os.getenv("RENDER_MODE", "POST").strip().upper()
+    print(f"DEBUG: Current RENDER_MODE from ENV: '{render_mode_env}'")
+    
+    render_as_reel = render_mode_env == "REEL"
+    
+    # If no template is provided but we are in REEL mode, create a default full-frame template
+    if not template_json and render_as_reel:
+        print(f"ℹ️ No template found for user {user_id}. Using default aspect-ratio Reel template.")
+        
+        # Determine image aspect ratio to avoid stretching
+        img_h = 720
+        img_y = 0
+        try:
+            temp_dim_filename = f"dim_{user_id}_{random.randint(1, 1000000)}"
+            local_img = download_video(image_url_from_webhook, folder="temp_dims", filename=temp_dim_filename)
+            if local_img:
+                from PIL import Image as PILImage
+                with PILImage.open(local_img) as img:
+                    iw, ih = img.size
+                    # Scale to width 405
+                    ratio = 405.0 / iw
+                    img_h = ih * ratio
+                    # Center vertically on 720 canvas
+                    img_y = (720 - img_h) / 2.0
+                if os.path.exists(local_img): os.remove(local_img)
+        except Exception as e:
+            print(f"⚠️ Could not determine image dimensions: {e}")
+
+        template_json = {
+            "bgColor": "#000000",
+            "bgEnabled": True,
+            "objects": [
+                {
+                    "id": "main_image",
+                    "type": "image",
+                    "x": 0,
+                    "y": img_y,
+                    "width": 405,
+                    "height": img_h,
+                    "opacity": 1,
+                    "visible": True,
+                    "src": image_url_from_webhook
+                }
+            ]
+        }
+
+    if template_json:
+        print(f"🎨 Rendering post with template for user {user_id} (As Reel: {render_as_reel})...")
+        try:
+            if render_as_reel:
+                # Use standard reel rendering
+                output_path_reel = output_path.replace(".png", ".mp4")
+                video_path = render_video(template_json, configuration or {}, image_url_from_webhook, output_path_reel)
+                url = upload_temp(video_path)
+                media_type = "REELS"
+            else:
+                # Use image rendering
+                image_path = render_image(template_json, configuration or {}, image_url_from_webhook, output_path)
+                url = upload_temp(image_path)
+                media_type = "IMAGE"
+        except Exception as render_ex:
+            print(f"❌ Rendering failed: {render_ex}. Falling back to original image.")
+            url = get_temp_public_url(image_url_from_webhook, user_id)
+            media_type = "IMAGE"
+    else:
+        url = get_temp_public_url(image_url_from_webhook, user_id)
+        media_type = "IMAGE"
+
+    if not url:
+        print("❌ Failed to get a public URL for the image.")
+        return None
+
+    try:
+        # Step 0: Determine caption from configuration if available
+        if configuration and configuration.get("caption", {}).get("mode") == "custom":
+            caption = configuration["caption"].get("value", caption)
+        
+        # Add hashtags if available
+        if configuration and configuration.get("hashtags", {}).get("mode") == "custom":
+            tags = configuration["hashtags"].get("value", [])
+            if tags:
+                tag_string = " ".join([f"#{t.strip().lstrip('#')}" for t in tags if t.strip()])
+                caption = f"{caption}\n\n{tag_string}"
+
+        caption = clean_caption(caption)
+        
+        # STEP 1: Create media container
+        create_url = f"https://graph.instagram.com/v25.0/{user_id}/media"
+        print(f"🚀 Creating Instagram {media_type} container for user {user_id}...")
+        create_payload = {
+            "caption": caption,
+            "access_token": access_token
+        }
+        
+        if media_type == "REELS":
+            create_payload["media_type"] = "REELS"
+            create_payload["video_url"] = url
+            create_payload["share_to_feed"] = "true"
+            create_payload["thumb_offset"] = "2000"
+        else:
+            # Default to IMAGE
+            create_payload["image_url"] = url
+
+        create_res = requests.post(create_url, data=create_payload)
+        create_res.raise_for_status()
+        creation_id = create_res.json().get("id")
+        print("Container created (Post):", creation_id)
+        
+        # STEP 2: Poll until processing is complete
+        status = "IN_PROGRESS"
+        while status == "IN_PROGRESS":
+            time.sleep(5)
+            status_url = f"https://graph.instagram.com/v25.0/{creation_id}"
+            status_params = {"fields": "status_code", "access_token": access_token}
+            status_res = requests.get(status_url, params=status_params)
+            status_res.raise_for_status()
+            status = status_res.json().get("status_code", "FINISHED")
+            print("Processing status (Post):", status)
+            if status == "ERROR": raise Exception("Media processing failed")
+        
+        # STEP 3: Publish the media
+        publish_url = f"https://graph.instagram.com/v25.0/{user_id}/media_publish"
+        publish_params = {"creation_id": creation_id, "access_token": access_token}
+        publish_res = requests.post(publish_url, params=publish_params)
+        publish_res.raise_for_status()
+        
+        print("Post published successfully:", publish_res.json())
+        return publish_res.json()
+    
+    except requests.exceptions.RequestException as e:
+        print("Request failed (Post):", e)
+        return None
+    except Exception as ex:
+        print("Error (Post):", ex)
         return None

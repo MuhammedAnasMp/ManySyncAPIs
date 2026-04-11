@@ -499,7 +499,44 @@ class InstagramWebhookView(APIView):
                         att_type = attachment.get("type")
 
                         # 🎬 Handle Instagram Reel
-                        if att_type == "ig_reel":
+                        if   att_type == "ig_reel":
+
+                            # sample instagram webhook payload
+                            # {
+                            #     "object": "instagram",
+                            #     "entry": [
+                            #         {
+                            #             "time": 1775748900067,
+                            #             "id": "17841441535053704",
+                            #             "messaging": [
+                            #                 {
+                            #                     "sender": {
+                            #                         "id": "943608128068235"
+                            #                     },
+                            #                     "recipient": {
+                            #                         "id": "17841441535053704"
+                            #                     },
+                            #                     "timestamp": 1775748899372,
+                            #                     "message": {
+                            #                         "mid": "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlEOjE3ODQxNDQxNTM1MDUzNzA0OjM0MDI4MjM2Njg0MTcxMDMwMTI0NDI3NjI2MTYwMjE4NzI4MjYxNTozMjc1Njc4NTQ4NTg5Njg2NDA3OTMwMDIzNzk0ODA5MjQxNgZDZD",
+                            #                         "attachments": [
+                            #                             {
+                            #                                 "type": "ig_reel",
+                            #                                 "payload": {
+                            #                                     "reel_video_id": "18087782618022081",
+                            #                                     "title": "\u201c\u0d35\u0d34\u0d3f \u0d24\u0d1f\u0d1e\u0d4d\u0d1e\u0d3e\u0d7d\u2026 \u0d28\u0d2e\u0d4d\u0d2e\u0d7e \u0d35\u0d34\u0d3f\u0d2f\u0d41\u0d23\u0d4d\u0d1f\u0d3e\u0d15\u0d4d\u0d15\u0d41\u0d02 \u201c \ud83d\udea7\u27a1\ufe0f\ud83d\udca5\n\nNO TOLL \u274c\u270a\ud83c\udffb\n.\n.\n.\n#notoll #kozhikode #time #justice #respond #react #justiceforall #reels #trending #reelsinstagram #fyp #highways",        
+                            #                                     "url": "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=18087782618022081&signature=Ab0jZotmhcjby9PwASLnVpN7GD5JFZQWoCJbrVIuScz3hpNvkiJTz9cGrRcZbTwKZnf3iR-KJ99LGg3GU_UuLF-Ammju9fsUdewmBElsLa0ezt_gP5TKSuVKxM593kpahBU3q593DPBf8cFTNmblrcUyz0YnXR6r8OSUUWJD3aNujRmvHNrhHa32BZXwgHYRGvQ1-yXmy-9idzboVAD9qAA1DByvGKFr"
+                            #                                 }
+                            #                             }
+                            #                         ]
+                            #                     }
+                            #                 }
+                            #             ]
+                            #         }
+                            #     ]
+                            # }
+
+                            
                             reel_payload = attachment.get("payload", {})
                             reel_id = reel_payload.get("reel_video_id")
                             reel_title = reel_payload.get("title")
@@ -509,10 +546,84 @@ class InstagramWebhookView(APIView):
                             print(f"   Reel ID: {reel_id}")
                             print(f"   Title: {reel_title}")
                             print(f"   URL: {reel_url}")
-                            account = DeveloperAppAccount.objects.get(psid=sender_id)
-                            Thread(target=upload_reel, args=(reel_url, reel_title, account.access_token, account.account_id)).start()
 
-                          
+                            try:
+                                account = DeveloperAppAccount.objects.get(psid=sender_id)
+                                
+                                # Fetch template
+                                account_template = AccountTemplate.objects.filter(
+                                    account=account, 
+                                    template_type='reel'
+                                ).select_related('template').first()
+                                
+                                template_json = None
+                                if account_template and account_template.template:
+                                    template_json = account_template.template.template_json
+                                
+                                # Fetch configuration
+                                config_obj = AccountTemplateConfiguration.objects.filter(
+                                    account=account, 
+                                    template_type='reel'
+                                ).first()
+                                
+                                configuration = config_obj.configuration if config_obj else {}
+
+                                # Start processing in background
+                                Thread(target=upload_reel, args=(
+                                    reel_url, 
+                                    reel_title, 
+                                    account.access_token, 
+                                    account.account_id,
+                                    template_json,
+                                    configuration
+                                )).start()
+
+                            except DeveloperAppAccount.DoesNotExist:
+                                print(f"⚠️ Account not found for PSID: {sender_id}")
+                        elif att_type == "ig_post":
+                            post_payload = attachment.get("payload", {})
+                            image_url = post_payload.get("url")
+                            post_title = post_payload.get("title")
+
+                            print(f"📸 Image Post received from {sender_id}")
+                            print(f"   URL: {image_url}")
+                            print(f"   Title: {post_title}")
+
+                            try:
+                                account = DeveloperAppAccount.objects.get(psid=sender_id)
+                                
+                                # Fetch template
+                                account_template = AccountTemplate.objects.filter(
+                                    account=account, 
+                                    template_type='image'
+                                ).select_related('template').first()
+                                
+                                template_json = None
+                                if account_template and account_template.template:
+                                    template_json = account_template.template.template_json
+                                
+                                # Fetch configuration
+                                config_obj = AccountTemplateConfiguration.objects.filter(
+                                    account=account, 
+                                    template_type='image'
+                                ).first()
+                                
+                                configuration = config_obj.configuration if config_obj else {}
+
+                                # Start processing in background
+                                from .utils import upload_post
+                                Thread(target=upload_post, args=(
+                                    image_url, 
+                                    post_title, 
+                                    account.access_token, 
+                                    account.account_id,
+                                    template_json,
+                                    configuration
+                                )).start()
+
+                            except DeveloperAppAccount.DoesNotExist:
+                                print(f"⚠️ Account not found for PSID: {sender_id}")
+                        
 
                         # (Optional) Handle other attachment types
                         else:

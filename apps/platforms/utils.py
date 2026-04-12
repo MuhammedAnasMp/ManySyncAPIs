@@ -245,9 +245,14 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
     
     render_as_reel = render_mode_env == "REEL"
     
-    # If no template is provided but we are in REEL mode, create a default full-frame template
-    if not template_json and render_as_reel:
-        print(f"ℹ️ No template found for user {user_id}. Using default aspect-ratio Reel template.")
+    # Determine if we should use the visual template or fall back to a simple full-frame image-to-reel
+    # We use default if: no template provided OR user explicitly disabled 'use_template' in config
+    use_visual_template = True
+    if configuration and "custom_audio" in configuration:
+        use_visual_template = configuration["custom_audio"].get("use_template", True)
+
+    if render_as_reel and (not template_json or not use_visual_template):
+        print(f"ℹ️ {'No template found' if not template_json else 'Template disabled'} for user {user_id}. Using default aspect-ratio Reel template.")
         
         # Determine image aspect ratio to avoid stretching
         img_h = 720

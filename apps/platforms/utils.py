@@ -112,11 +112,16 @@ def get_temp_public_url(video_url, user_id):
     return upload_temp(file_path)
 
 def clean_caption(caption):
-    print("Caption: ",caption)
-    # Remove @username patterns
-    caption = re.sub(r'@\w+', '', caption).strip()
-    print("Cleaned Caption: ",caption)
-    return caption
+    if not caption: return ""
+    # Remove @usernames
+    caption = re.sub(r'@[A-Za-z0-9._]+', '', caption)
+    # Remove #hashtags
+    caption = re.sub(r'#[A-Za-z0-9_]+', '', caption)
+    # Remove IG spacers (lines with solo dots/bullets)
+    caption = re.sub(r'(?m)^\s*[\.\•]+\s*$', '', caption)
+    # Collapse multiple newlines
+    caption = re.sub(r'\n{3,}', '\n\n', caption)
+    return caption.strip()
 
 
 
@@ -128,10 +133,13 @@ def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_
     cover_url = None
     
     # 1. Handle Rendering (Video)
+    from .models import DeveloperAppAccount
+    account = DeveloperAppAccount.objects.filter(account_id=user_id).first()
+    
     if template_json:
         print(f"🎨 Rendering reel with template for user {user_id}...")
         try:
-            video_path = render_video(template_json, configuration or {}, reel_url_from_webhook, output_path)
+            video_path = render_video(template_json, configuration or {}, reel_url_from_webhook, output_path, account=account, raw_caption=caption)
             url = upload_temp(video_path)
             if os.path.exists(output_path):
                 os.remove(output_path)
@@ -152,7 +160,7 @@ def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_
         elif t_mode == "template" and template_json:
             print("🖼️ Generating thumbnail from template...")
             try:
-                thumb_path = render_thumbnail(template_json, configuration, reel_url_from_webhook, thumb_output_path)
+                thumb_path = render_thumbnail(template_json, configuration, reel_url_from_webhook, thumb_output_path, account=account, raw_caption=caption)
                 if thumb_path:
                     cover_url = upload_temp(thumb_path)
                     if os.path.exists(thumb_output_path):
@@ -169,14 +177,14 @@ def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_
         if configuration and configuration.get("caption", {}).get("mode") == "custom":
             caption = configuration["caption"].get("value", caption)
         
+        caption = clean_caption(caption)
+
         # Add hashtags if available
         if configuration and configuration.get("hashtags", {}).get("mode") == "custom":
             tags = configuration["hashtags"].get("value", [])
             if tags:
                 tag_string = " ".join([f"#{t.strip().lstrip('#')}" for t in tags if t.strip()])
                 caption = f"{caption}\n\n{tag_string}"
-
-        caption = clean_caption(caption)
         
         # STEP 1: Create media container
         create_url = f"https://graph.instagram.com/v25.0/{user_id}/media"
@@ -291,18 +299,21 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
             ]
         }
 
+    from .models import DeveloperAppAccount
+    account = DeveloperAppAccount.objects.filter(account_id=user_id).first()
+
     if template_json:
         print(f"🎨 Rendering post with template for user {user_id} (As Reel: {render_as_reel})...")
         try:
             if render_as_reel:
                 # Use standard reel rendering
                 output_path_reel = output_path.replace(".png", ".mp4")
-                video_path = render_video(template_json, configuration or {}, image_url_from_webhook, output_path_reel)
+                video_path = render_video(template_json, configuration or {}, image_url_from_webhook, output_path_reel, account=account, raw_caption=caption)
                 url = upload_temp(video_path)
                 media_type = "REELS"
             else:
                 # Use image rendering
-                image_path = render_image(template_json, configuration or {}, image_url_from_webhook, output_path)
+                image_path = render_image(template_json, configuration or {}, image_url_from_webhook, output_path, account=account, raw_caption=caption)
                 url = upload_temp(image_path)
                 media_type = "IMAGE"
         except Exception as render_ex:
@@ -322,14 +333,14 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
         if configuration and configuration.get("caption", {}).get("mode") == "custom":
             caption = configuration["caption"].get("value", caption)
         
+        caption = clean_caption(caption)
+
         # Add hashtags if available
         if configuration and configuration.get("hashtags", {}).get("mode") == "custom":
             tags = configuration["hashtags"].get("value", [])
             if tags:
                 tag_string = " ".join([f"#{t.strip().lstrip('#')}" for t in tags if t.strip()])
                 caption = f"{caption}\n\n{tag_string}"
-
-        caption = clean_caption(caption)
         
         # STEP 1: Create media container
         create_url = f"https://graph.instagram.com/v25.0/{user_id}/media"

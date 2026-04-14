@@ -53,16 +53,27 @@ _FALLBACK_FONTS = [
 ]
 
 # ── Placeholder resolver (matches Template2.tsx resolvePlaceholders) ──────────
-_PLACEHOLDER_SAMPLES = {
-    "{{caption}}": "Amazing sunset view #photography",
-    "{{message}}": "Hey, check this out!",
+_DEFAULT_SAMPLES = {
+    "{{caption}}": "Amazing sunset view",
+    "{{message}}": "this will come soon",
     "{{me}}": "John Doe",
     "{{live_followers}}": "1,000",
     "{{live_following}}": "1,000",
     "{{live_media_count}}": "1,000",
-    
 }
 _PH_RE = re.compile(r"\{\{([^}]+)\}\}")
+
+def clean_caption_text(text):
+    if not text: return ""
+    # Remove @usernames
+    text = re.sub(r'@[A-Za-z0-9._]+', '', text)
+    # Remove #hashtags (some might want to keep them, but user specifically asked to remove)
+    text = re.sub(r'#[A-Za-z0-9_]+', '', text)
+    # Remove lines that only contain dots, bullets, or whitespace (spacers)
+    text = re.sub(r'(?m)^\s*[\.\•]+\s*$', '', text)
+    # Collapse multiple newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 def _format_dt(fmt, now):
     pad = lambda n: str(n).zfill(2)
@@ -81,13 +92,18 @@ def _format_dt(fmt, now):
         fmt = fmt.replace(tok, val)
     return fmt
 
-def resolve_placeholders(text):
+def resolve_placeholders(text, samples=None):
     if not text or "{{" not in text:
         return text
     now = datetime.now()
+    if samples is None:
+        samples = _DEFAULT_SAMPLES
+    
     def _sub(m):
         full, inner = m.group(0), m.group(1)
-        return _PLACEHOLDER_SAMPLES.get(full) or _format_dt(inner, now)
+        if full in samples:
+            return str(samples[full])
+        return _format_dt(inner, now)
     return _PH_RE.sub(_sub, text)
 
 _RTL_RE = re.compile(
@@ -97,11 +113,11 @@ def detect_direction(text):
     return "rtl" if text and _RTL_RE.search(text) else "ltr"
 
 # ── Qt text renderer ──────────────────────────────────────────────────────────
-def render_text_object_qt(obj, scale=1.0):
+def render_text_object_qt(obj, scale=1.0, samples=None):
     if not QT_AVAILABLE:
         return None
         
-    raw_text   = resolve_placeholders(obj.get("text", ""))
+    raw_text   = resolve_placeholders(obj.get("text", ""), samples)
     if not raw_text:
         return None
 
@@ -502,7 +518,7 @@ def composite_with_blend_mode(bg_clip, fg_clip, blend_mode):
         return blend_frame(bg_frame, fg_frame_norm, fg_mask, X, Y, blend_mode)
     return bg_clip.transform(lambda get_frame, t: make_frame(get_frame, t))
 
-def process_object(obj, duration, final_video_so_far, input_video_url=None):
+def process_object(obj, duration, final_video_so_far, input_video_url=None, samples=None):
     if not obj.get("visible", True):
         return None, final_video_so_far, "normal"
 
@@ -562,8 +578,9 @@ def process_object(obj, duration, final_video_so_far, input_video_url=None):
         if is_main_img and input_video_url: # Using input_video_url as generic media input
             src = input_video_url
             
-        local_path = get_temp_file(src, ".jpg")
-        pil = Image.open(local_path).convert("RGB")
+        # Support transparency for cutouts and rounded images
+        local_path = get_temp_file(src, "")
+        pil = Image.open(local_path).convert("RGBA")
         crop_dict = obj.get("crop")
         if crop_dict:
             cx, cy, cw, ch = int(crop_dict["x"]), int(crop_dict["y"]), int(crop_dict["w"]), int(crop_dict["h"])
@@ -571,17 +588,37 @@ def process_object(obj, duration, final_video_so_far, input_video_url=None):
             cx, cy, cw, ch = max(0, min(cx, iw - 1)), max(0, min(cy, ih - 1)), max(1, min(cw, iw - cx)), max(1, min(ch, ih - cy))
             pil = pil.crop((cx, cy, cx + cw, cy + ch))
         pil = pil.resize((int(w), int(h)), Image.LANCZOS)
-        rgb_np = apply_image_filters(np.array(pil, dtype=np.uint8), float(obj.get("brightness", 100)), float(obj.get("contrast", 100)), float(obj.get("saturate", 100)), float(obj.get("blur", 0)) * SCALE_FACTOR)
+        
+        # Split Alpha and RGB to apply filters only to colors
+        np_img = np.array(pil, dtype=np.uint8)
+        rgb_np = np_img[..., :3]
+        alpha_np = np_img[..., 3].astype(np.float32) / 255.0
+        
+        rgb_np = apply_image_filters(
+            rgb_np, 
+            float(obj.get("brightness", 100)), 
+            float(obj.get("contrast", 100)), 
+            float(obj.get("saturate", 100)), 
+            float(obj.get("blur", 0)) * SCALE_FACTOR
+        )
+        
         clip = ImageClip(rgb_np).with_duration(duration)
+        
         radius = float(obj.get("borderRadius", 0)) * SCALE_FACTOR
         radius = min(radius, w / 2.0, h / 2.0)
-        if radius > 0 or rotation != 0:
-            mask_frame = make_rounded_mask(w, h, radius)
-            mask_clip = ImageClip(mask_frame, is_mask=True).with_duration(duration)
+        
+        # Combine existing transparency (for cutouts) with border radius corners
+        if radius > 0:
+            rounded_mask = make_rounded_mask(w, h, radius)
+            alpha_np = alpha_np * rounded_mask
+        
+        # Apply the mask if it's not fully opaque or if there's rotation (to handle edges)
+        if alpha_np.min() < 1.0 or rotation != 0:
+            mask_clip = ImageClip(alpha_np, is_mask=True).with_duration(duration)
             clip = clip.with_mask(mask_clip)
 
     elif clip_type == "text":
-        patch = render_text_object_qt(obj, scale=SCALE_FACTOR)
+        patch = render_text_object_qt(obj, scale=SCALE_FACTOR, samples=samples)
         if patch is None: return None, final_video_so_far, "normal"
         patch_rgb, alpha_np = patch.convert("RGB"), np.array(patch.getchannel("A"), dtype=np.float32) / 255.0
         clip = (ImageClip(np.array(patch_rgb, dtype=np.uint8)).with_mask(ImageClip(alpha_np, is_mask=True)).with_duration(duration))
@@ -618,24 +655,37 @@ def process_object(obj, duration, final_video_so_far, input_video_url=None):
     clip = clip.with_position((final_x, final_y))
     return clip, final_video_so_far, blend_mode
 
-def render_video(template_json, configuration, input_video_url=None, output_path="output.mp4"):
-    global _PLACEHOLDER_SAMPLES
+def render_video(template_json, configuration, input_video_url=None, output_path="output.mp4", account=None, raw_caption=None):
+    samples = _DEFAULT_SAMPLES.copy()
     
-    objects = template_json.get("objects", [])
-    bg_hex = template_json.get("bgColor", "#000000")
-    bg_color = hex_to_rgb(bg_hex)
-    
-    # Override placeholders from configuration
+    # 0. Handle raw caption from webhook
+    if raw_caption:
+        samples["{{caption}}"] = clean_caption_text(raw_caption)
+    if account:
+        samples["{{me}}"] = account.account_name
+        samples["{{live_followers}}"] = f"{account.followers_count:,}"
+        samples["{{live_following}}"] = f"{account.follows_count:,}"
+        samples["{{live_media_count}}"] = f"{account.media_count:,}"
+
     if "caption" in configuration:
         c_cfg = configuration["caption"]
         if c_cfg.get("mode") == "custom" and c_cfg.get("value"):
-            _PLACEHOLDER_SAMPLES["{{caption}}"] = c_cfg["value"]
+            samples["{{caption}}"] = clean_caption_text(c_cfg["value"])
     
+    # Append hashtags to caption sample if custom hashtags are provided
     if "hashtags" in configuration:
         h_cfg = configuration["hashtags"]
         if h_cfg.get("mode") == "custom" and isinstance(h_cfg.get("value"), list):
             tags = " ".join([f"#{t.strip().lstrip('#')}" for t in h_cfg["value"] if t.strip()])
-            _PLACEHOLDER_SAMPLES["{{hashtags}}"] = tags
+            if tags:
+                samples["{{hashtags}}"] = tags
+                # Also append to {{caption}} if it exists
+                if samples.get("{{caption}}"):
+                    samples["{{caption}}"] = f"{samples['{{caption}}']}\n\n{tags}"
+
+    objects = template_json.get("objects", [])
+    bg_hex = template_json.get("bgColor", "#000000")
+    bg_color = hex_to_rgb(bg_hex)
 
     # Calculate duration
     duration = 5.0
@@ -683,7 +733,7 @@ def render_video(template_json, configuration, input_video_url=None, output_path
     final_video = final_video.with_audio(silent_audio)
     
     for obj in objects:
-        layer_clip, final_video, blend_mode = process_object(obj, duration, final_video, input_video_url)
+        layer_clip, final_video, blend_mode = process_object(obj, duration, final_video, input_video_url, samples)
         if layer_clip:
             if blend_mode == "normal":
                 final_video = CompositeVideoClip([final_video, layer_clip], size=(CW, CH))
@@ -748,7 +798,31 @@ def render_video(template_json, configuration, input_video_url=None, output_path
     final_video.close()
     return output_path
 
-def render_thumbnail(template_json, configuration, input_video_url=None, output_path="thumbnail.png"):
+def render_thumbnail(template_json, configuration, input_video_url=None, output_path="thumbnail.png", account=None, raw_caption=None):
+    samples = _DEFAULT_SAMPLES.copy()
+    if raw_caption:
+        samples["{{caption}}"] = clean_caption_text(raw_caption)
+    if account:
+        samples["{{me}}"] = account.account_name
+        samples["{{live_followers}}"] = f"{account.followers_count:,}"
+        samples["{{live_following}}"] = f"{account.follows_count:,}"
+        samples["{{live_media_count}}"] = f"{account.media_count:,}"
+        
+    if "caption" in configuration:
+        c_cfg = configuration["caption"]
+        if c_cfg.get("mode") == "custom" and c_cfg.get("value"):
+            samples["{{caption}}"] = clean_caption_text(c_cfg["value"])
+
+    # Append hashtags to caption sample if custom hashtags are provided
+    if "hashtags" in configuration:
+        h_cfg = configuration["hashtags"]
+        if h_cfg.get("mode") == "custom" and isinstance(h_cfg.get("value"), list):
+            tags = " ".join([f"#{t.strip().lstrip('#')}" for t in h_cfg["value"] if t.strip()])
+            if tags:
+                samples["{{hashtags}}"] = tags
+                if samples.get("{{caption}}"):
+                    samples["{{caption}}"] = f"{samples['{{caption}}']}\n\n{tags}"
+
     objects = template_json.get("thumbnail_objects", [])
     if not objects:
         # Fallback if no thumbnail_objects
@@ -787,7 +861,7 @@ def render_thumbnail(template_json, configuration, input_video_url=None, output_
                                                    float(obj.get("y", 0) * SCALE_FACTOR)))
                     layers.append(f_clip)
         else:
-            l_clip, _, _ = process_object(obj, duration, base)
+            l_clip, _, _ = process_object(obj, duration, base, None, samples)
             if l_clip:
                 layers.append(l_clip)
     
@@ -807,24 +881,30 @@ def render_thumbnail(template_json, configuration, input_video_url=None, output_
     
     return None
 
-def render_image(template_json, configuration, input_image_url=None, output_path="output.png"):
-    global _PLACEHOLDER_SAMPLES
-    
-    objects = template_json.get("objects", [])
-    bg_hex = template_json.get("bgColor", "#000000")
-    bg_color = hex_to_rgb(bg_hex)
-    
-    # Override placeholders from configuration
+def render_image(template_json, configuration, input_image_url=None, output_path="output.png", account=None, raw_caption=None):
+    samples = _DEFAULT_SAMPLES.copy()
+    if raw_caption:
+        samples["{{caption}}"] = clean_caption_text(raw_caption)
+    if account:
+        samples["{{me}}"] = account.account_name
+        samples["{{live_followers}}"] = f"{account.followers_count:,}"
+        samples["{{live_following}}"] = f"{account.follows_count:,}"
+        samples["{{live_media_count}}"] = f"{account.media_count:,}"
+
     if "caption" in configuration:
         c_cfg = configuration["caption"]
         if c_cfg.get("mode") == "custom" and c_cfg.get("value"):
-            _PLACEHOLDER_SAMPLES["{{caption}}"] = c_cfg["value"]
+            samples["{{caption}}"] = clean_caption_text(c_cfg["value"])
+
+    objects = template_json.get("objects", [])
+    bg_hex = template_json.get("bgColor", "#000000")
+    bg_color = hex_to_rgb(bg_hex)
     
     if "hashtags" in configuration:
         h_cfg = configuration["hashtags"]
         if h_cfg.get("mode") == "custom" and isinstance(h_cfg.get("value"), list):
             tags = " ".join([f"#{t.strip().lstrip('#')}" for t in h_cfg["value"] if t.strip()])
-            _PLACEHOLDER_SAMPLES["{{hashtags}}"] = tags
+            samples["{{hashtags}}"] = tags
 
     duration = 1.0
     final_image = ColorClip(size=(CW, CH), color=(0, 0, 0)).with_duration(duration)
@@ -836,7 +916,7 @@ def render_image(template_json, configuration, input_image_url=None, output_path
         final_image = CompositeVideoClip([final_image, m_bg_rect.with_position((0, m_bg_top))], size=(CW, CH))
 
     for obj in objects:
-        layer_clip, final_image, blend_mode = process_object(obj, duration, final_image, input_image_url)
+        layer_clip, final_image, blend_mode = process_object(obj, duration, final_image, input_image_url, samples)
         if layer_clip:
             if blend_mode == "normal":
                 final_image = CompositeVideoClip([final_image, layer_clip], size=(CW, CH))

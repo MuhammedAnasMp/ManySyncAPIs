@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.conf import settings
 from .models import Plan, Subscription, PlanFeature, PlanQuota, Usage, Transaction 
+from apps.platforms.models import DeveloperAppAccount, Template
 from .utils import can_post, get_quota
 import razorpay
 import json
@@ -129,6 +130,11 @@ class VerifyPaymentView(APIView):
         now = timezone.now()
         sub = Subscription.objects.filter(user=request.user).first()
 
+        PLAN_RANK = {'Free': 0, 'Starter': 1, 'Creator': 2, 'Pro': 3}
+        old_rank = -1
+        if sub and sub.plan:
+            old_rank = PLAN_RANK.get(sub.plan.name, 0)
+
         if plan_id:
             plan = Plan.objects.get(id=plan_id)
             item_name = plan.name
@@ -141,7 +147,7 @@ class VerifyPaymentView(APIView):
                     sub.start_date = now
                     sub.end_date = now + timedelta(days=30)
                     sub.is_active = True
-                    sub.credit = 0
+                    # sub.credit = 0  # Preserve existing credits
                     sub.save()
                 elif sub.is_active and sub.end_date and sub.end_date > now:
                     # Renewing same plan
@@ -154,7 +160,7 @@ class VerifyPaymentView(APIView):
                     sub.end_date = now + timedelta(days=30)
                     sub.is_active = True
                     sub.plan = plan
-                    sub.credit = 0
+                    # sub.credit = 0  # Preserve existing credits
                     sub.save()
                     print(f"DEBUG: Reactivating plan {plan}, start={sub.start_date}, end={sub.end_date}")
             else:
@@ -167,8 +173,17 @@ class VerifyPaymentView(APIView):
                     end_date=now + timedelta(days=30),
                     credit=0
                 )
-
                 print(f"DEBUG: Created new subscription with plan {plan}, start={sub.start_date}, end={sub.end_date}")
+
+            # Upgrade Logic: Handled by Subscription.save()
+            pass
+
+        # If the transaction also includes manually bundled credits in notes (e.g. promotional)
+        posts_to_add_note = int(notes.get('posts', 0))
+        if plan_id and posts_to_add_note > 0:
+            sub.credit += posts_to_add_note
+            sub.save()
+            print(f"DEBUG: Added manually bundled plan credits: {posts_to_add_note}")
 
         elif addon:
             posts_to_add = int(notes.get('posts', 0))
@@ -244,6 +259,27 @@ class UserSubscriptionView(APIView):
 
             credits_available = sub.credit
             
+            template_quota = get_quota(request.user, 'template_count')
+            account_quota = get_quota(request.user, 'account_count')
+            
+            # Enforce account quota: deactivate extra accounts if necessary
+            all_accounts = list(DeveloperAppAccount.objects.filter(user=request.user).order_by('created_at'))
+            active_accounts_count = 0
+            for acc in all_accounts:
+                if acc.is_active:
+                    if active_accounts_count < account_quota:
+                        active_accounts_count += 1
+                    else:
+                        # Over limit, deactivate
+                        acc.is_active = False
+                        acc.save()
+
+            templates_used = Template.objects.filter(created_by=request.user).count()
+            accounts_used = DeveloperAppAccount.objects.filter(user=request.user, is_active=True).count()
+            
+            can_add_template = templates_used < template_quota
+            can_add_account = accounts_used < account_quota
+            
             return Response({
                 'has_plan': True,
                 'plan_name': sub.plan.name,
@@ -252,14 +288,18 @@ class UserSubscriptionView(APIView):
                 'end_date': sub.end_date,
                 'features': features,
                 'quotas': {
-                    'apps_limit': get_quota(request.user, 'apps_limit'),
-                    'accounts_limit': get_quota(request.user, 'accounts_limit'),
                     'posts_per_month': get_quota(request.user, 'posts_per_month'),
+                    'template_count': template_quota,
+                    'account_count': account_quota
                 },
                 'usage': {
                     'posts_used': posts_used,
+                    'templates_used': templates_used,
+                    'accounts_used': accounts_used,
                     'credits_available': credits_available,
-                    'can_post': can_post(request.user)
+                    'can_post': can_post(request.user),
+                    'can_add_template': templates_used < template_quota,
+                    'can_add_account': accounts_used < account_quota
                 }
             })
         # except Exception:

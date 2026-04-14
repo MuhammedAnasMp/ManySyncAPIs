@@ -58,6 +58,53 @@ class Subscription(models.Model):
     def __str__(self):
         return f"{self.user} - {self.plan.name if self.plan else 'No Plan'}"
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        old_plan = None
+        if not is_new:
+            try:
+                old_plan = Subscription.objects.get(pk=self.pk).plan
+            except Subscription.DoesNotExist:
+                pass
+            
+        # If plan changed (e.g. downgrade/upgrade), calculate credits BEFORE saving
+        if old_plan != self.plan and self.plan:
+             PLAN_RANK = {'Free': 0, 'Starter': 1, 'Creator': 2, 'Pro': 3}
+             old_rank = PLAN_RANK.get(old_plan.name, -1) if old_plan else -1
+             new_rank = PLAN_RANK.get(self.plan.name, 0)
+             
+             if new_rank > old_rank:
+                 from apps.billing.models import PlanQuota
+                 pq = PlanQuota.objects.filter(plan=self.plan, key__name='posts_per_month').first()
+                 if pq:
+                     self.credit += pq.value
+
+        super().save(*args, **kwargs)
+        
+        # If plan changed (e.g. downgrade/upgrade), or account_count might have changed
+        if old_plan != self.plan:
+            from apps.platforms.models import DeveloperAppAccount
+            from apps.billing.utils import get_quota
+            quota = get_quota(self.user, "account_count")
+            
+            # Current status
+            active_accounts = DeveloperAppAccount.objects.filter(user=self.user, is_active=True).order_by('created_at')
+            active_count = active_accounts.count()
+
+            if active_count > quota:
+                # Deactivate extra (Downgrade)
+                for acc in active_accounts[quota:]:
+                    acc.is_active = False
+                    acc.save()
+            elif active_count < quota:
+                # Reactivate paused (Upgrade)
+                paused_accounts = DeveloperAppAccount.objects.filter(user=self.user, is_active=False).order_by('created_at')
+                available_slots = quota - active_count
+                if paused_accounts.exists() and available_slots > 0:
+                    for acc in paused_accounts[:available_slots]:
+                        acc.is_active = True
+                        acc.save()
+
 class Usage(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="usages")
     key = models.CharField(max_length=50)

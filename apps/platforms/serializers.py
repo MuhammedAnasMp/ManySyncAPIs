@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PlatformAccount, DeveloperApp, DeveloperAppAccount
+from .models import PlatformAccount, DeveloperAppAccount
 
 class PlatformAccountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,16 +20,10 @@ class DeveloperAppAccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DeveloperAppAccount
-        fields = ['id', 'developer_app', 'account_name', 'account_id', 'profile_picture_url', 'access_token', 'is_active', 'is_verified', 'is_flagged', 'followers_count', 'follows_count', 'media_count', 'created_at']
+        fields = ['id', 'account_name', 'account_id', 'profile_picture_url', 'access_token', 'is_active', 'is_verified', 'is_flagged', 'followers_count', 'follows_count', 'media_count', 'created_at']
         read_only_fields = ['id', 'created_at']
 
-class DeveloperAppSerializer(serializers.ModelSerializer):
-    associated_accounts = DeveloperAppAccountSerializer(many=True, read_only=True)
 
-    class Meta:
-        model = DeveloperApp
-        fields = ['id', 'user', 'app_name', 'platform', 'app_id', 'app_secret', 'associated_accounts', 'created_at']
-        read_only_fields = ['id', 'user', 'created_at']
 
 from .models import Template, AccountTemplate, AccountTemplateConfiguration
 

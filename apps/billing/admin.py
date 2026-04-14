@@ -23,8 +23,9 @@ class FeatureAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('user', 'plan', 'is_active', 'start_date', 'end_date')
-
+    list_display = ('user', 'plan', 'is_active', 'start_date', 'end_date', 'credit')
+    list_editable = ('plan', 'is_active', 'credit')
+    list_display_links = ('user',)
 @admin.register(Usage)
 class UsageAdmin(admin.ModelAdmin):
     list_display = ('user', 'key', 'used', 'period_start')

@@ -9,16 +9,14 @@ class Command(BaseCommand):
                 {'code': 'caption', 'description': 'Basic AI Captioning'},
                 {'code': 'hashtags', 'description': 'Basic AI Hashtags generation'},
                 {'code': 'thumbnail', 'description': 'Custom thumbnail control'},
-                {'code': 'location', 'description': 'Location tagging for posts'},
-                {'code': 'creator_credit', 'description': 'Dynamic creator crediting'},
-                {'code': 'advanced_caption', 'description': 'Advanced AI caption tools'},      
                 {'code': 'custom_audio', 'description': 'Custom audio control'},
-                {'code': 'share_to_post', 'description': 'Share to Post functionality'},
+                {'code': 'image_to_reel', 'description': 'Image to Reel Rendering Engine'},
                 {'code': 'template_image_posting', 'description': 'Template image posting'},
                 {'code': 'template_reel_posting', 'description': 'Template reel posting'},
                 {'code': 'template_story_posting', 'description': 'Template story posting'},
-                {'code': 'template_video_posting', 'description': 'Template video posting'}   ,
-                {'code': 'intros_outros', 'description': 'Intros and Outros'} 
+                {'code': 'template_video_posting', 'description': 'Template video posting'},
+                {'code': 'intros_outros', 'description': 'Intros and Outros'},
+                {'code': 'publish_template', 'description': 'Publish template to marketplace'}
         ]
         
         feature_objs = {}
@@ -31,10 +29,10 @@ class Command(BaseCommand):
                 'name': 'Free',
                 'price': 0.00,
                 'quotas': [
-                    {'key': 'apps_limit', 'value': 1},
-                    {'key': 'accounts_limit', 'value': 1},
                     {'key': 'posts_per_month', 'value': 50},
                     {'key': 'posts_per_day', 'value': 2},
+                    {'key': 'template_count', 'value': 1},
+                    {'key': 'account_count', 'value': 1},
                 ],
                 'features': ['caption', 'hashtags']    
             },
@@ -42,10 +40,10 @@ class Command(BaseCommand):
                 'name': 'Starter',
                 'price': 149.00,
                 'quotas': [
-                        {'key': 'apps_limit', 'value': 1},
-                        {'key': 'accounts_limit', 'value': 1},
                         {'key': 'posts_per_month', 'value': 100},
                         {'key': 'posts_per_day', 'value': 5},
+                        {'key': 'template_count', 'value': 5},
+                        {'key': 'account_count', 'value': 2},
                     ],
                 'features': ['caption', 'hashtags']
             },
@@ -53,23 +51,23 @@ class Command(BaseCommand):
                 'name': 'Creator',
                 'price': 399.00,
                 'quotas': [
-                        {'key': 'apps_limit', 'value': 1},
-                        {'key': 'accounts_limit', 'value': 3},
                         {'key': 'posts_per_month', 'value': 500},
                         {'key': 'posts_per_day', 'value': 10},
+                        {'key': 'template_count', 'value': 15},
+                        {'key': 'account_count', 'value': 5},
                     ],
-                'features': ['caption', 'hashtags', 'thumbnail', 'location', 'creator_credit', 'share_to_post']
+                'features': ['caption', 'hashtags', 'thumbnail', 'image_to_reel', 'publish_template']
             },
             {
                 'name': 'Pro',
                 'price': 999.00,
                 'quotas': [
-                        {'key': 'apps_limit', 'value': 100},
-                        {'key': 'accounts_limit', 'value': 10},
                         {'key': 'posts_per_month', 'value': 1500},
                         {'key': 'posts_per_day', 'value': 20},
+                        {'key': 'template_count', 'value': 50},
+                        {'key': 'account_count', 'value': 15},
                     ],
-                'features': ['caption', 'hashtags', 'thumbnail', 'location', 'creator_credit', 'advanced_caption', 'share_to_post']
+                'features': ['caption', 'hashtags', 'thumbnail', 'image_to_reel', 'publish_template']
             }
         ]
         
@@ -101,6 +99,6 @@ class Command(BaseCommand):
                     defaults={'enabled': True}
                 )
 
-        print("✅ Plans, quotas, and features seeded successfully!")
+        print("DONE! Plans, quotas, and features seeded successfully!")
 
         self.stdout.write(self.style.SUCCESS("Successfully seeded plans, features, and quotas!"))

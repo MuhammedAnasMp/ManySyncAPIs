@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from django.utils import timezone
 import requests,json,redis
 from rest_framework.views import APIView
-from .models import PlatformAccount, DeveloperApp, DeveloperAppAccount
-from .serializers import PlatformAccountSerializer, DeveloperAppSerializer, DeveloperAppAccountSerializer
+from .models import PlatformAccount, DeveloperAppAccount
+from .serializers import PlatformAccountSerializer, DeveloperAppAccountSerializer
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from .utils import check_if_follows
@@ -15,6 +15,8 @@ from django.core.cache import cache
 import time
 from datetime import datetime
 from .utils import upload_reel
+from django.db.models import Q
+import requests
 
 from threading import Thread
 class PlatformAccountViewSet(viewsets.ModelViewSet):
@@ -246,70 +248,14 @@ class WhatsAppWebhookView(APIView):
             
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-class DeveloperAppViewSet(viewsets.ModelViewSet):
-    serializer_class = DeveloperAppSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        return DeveloperApp.objects.filter(user=self.request.user)
-
-    def list(self, request, *args, **kwargs):
-        # Spawn a background thread to quietly refresh expiring Meta/Instagram profile URLs
-        import threading
-        def update_profiles(user_id):
-            import requests
-            accounts = DeveloperAppAccount.objects.filter(developer_app__user_id=user_id)
-            for acc in accounts:
-                if acc.access_token:
-                    # Fetch latest profile picture and username
-                    url = "https://graph.instagram.com/v25.0/me"
-                    params = {
-                        "fields": "id,username,profile_picture_url,followers_count,follows_count,media_count", 
-                        "access_token": acc.access_token
-                    }
-                    try:
-                        res = requests.get(url, params=params, timeout=10)
-                        if res.status_code == 200:
-                            data = res.json()
-                            save_needed = False
-                            
-                            new_username = data.get('username')
-                            if new_username and new_username != acc.account_name:
-                                acc.account_name = new_username
-                                save_needed = True
-                                
-                            new_pic = data.get('profile_picture_url')
-                            if new_pic and new_pic != acc.profile_picture_url:
-                                acc.profile_picture_url = new_pic
-                                save_needed = True
-                                
-                            # Update metrics
-                            acc.followers_count = data.get('followers_count', acc.followers_count)
-                            acc.follows_count = data.get('follows_count', acc.follows_count)
-                            acc.media_count = data.get('media_count', acc.media_count)
-                            save_needed = True
-                                
-                            if save_needed:
-                                acc.save(update_fields=['account_name', 'profile_picture_url', 'followers_count', 'follows_count', 'media_count'])
-                    except Exception as e:
-                        print(f"Error refreshing profile for {acc.account_name}: {e}")
-
-        # Start thread
-        t = threading.Thread(target=update_profiles, args=(request.user.id,))
-        t.start()
-        
-        # Return response without blocking
-        return super().list(request, *args, **kwargs)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
     serializer_class = DeveloperAppAccountSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return DeveloperAppAccount.objects.filter(developer_app__user=self.request.user)
+        return DeveloperAppAccount.objects.filter(user=self.request.user)
 
     @action(detail=True, methods=['post'])
     def generate_handshake(self, request, pk=None):
@@ -317,8 +263,9 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
         import json
         account = self.get_object()
         
-        # Verify the user owns this app
-        if getattr(account.developer_app, 'user', None) != request.user:
+        # Verify the user owns this account
+        is_owner = (account.user == request.user)
+        if not is_owner:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
             
         # Generate a short unique code starting with aoea
@@ -332,8 +279,18 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
         return Response({"code": code}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
+        from apps.billing.utils import get_quota
+        account_quota = get_quota(request.user, "account_count")
+        active_accounts_used = DeveloperAppAccount.objects.filter(user=request.user, is_active=True).count()
+        # We allow creating accounts even if at limit, but they will be inactive
+        # unless specifically allowed. But for now, let's keep the block for new connections
+        # if the total accounts (regardless of active status) exceeds some large buffer,
+        # or just allow it and set is_active based on quota.
+        
+        # Recommendation: Set is_active=True only if active_accounts_used < account_quota
+        is_active_initial = active_accounts_used < account_quota
+
         access_token = request.data.get('access_token')
-        developer_app_id = request.data.get('developer_app')
         account_name = "Unknown Account"
         account_id = ""
         profile_picture_url = ""
@@ -375,14 +332,13 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
                 follows_count = 0
                 media_count = 0
 
-        # Only proceed if both account_id and developer_app_id exist
-        if account_id and developer_app_id:
+        # Only proceed if account_id exists
+        if account_id:
             # Check if this account already exists globally 
-            existing = DeveloperAppAccount.objects.select_related('developer_app__user').filter(account_id=account_id).first()
+            existing = DeveloperAppAccount.objects.filter(account_id=account_id).first()
 
             if existing:
-                existing_user = getattr(existing.developer_app, 'user', None)  # safer access
-                print(request.user)
+                existing_user = existing.user
                 if existing_user == request.user:
                     # Already added by the same user
                     return Response(
@@ -392,21 +348,22 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
                 else:
                     # Already added by another user
                     return Response(
-                        {"detail": "This account is already linked to another user's app."},
+                        {"detail": "This account is already linked  "},
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
             # Try to create a new account entry
             try:
                 obj = DeveloperAppAccount.objects.create(
-                    developer_app_id=developer_app_id,
+                    user=request.user,
                     account_id=account_id,
                     account_name=account_name,
                     profile_picture_url=profile_picture_url,
                     access_token=access_token,
                     followers_count=followers_count,
                     follows_count=follows_count,
-                    media_count=media_count
+                    media_count=media_count,
+                    is_active=is_active_initial
                 )
             except IntegrityError:
                 # In case of a rare race condition
@@ -418,18 +375,19 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(obj)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        # Fallback if account_id or developer_app_id is missing
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(
-            account_name=account_name,
-            account_id=account_id,
-            profile_picture_url=profile_picture_url,
-            followers_count=followers_count,
-            follows_count=follows_count,
-            media_count=media_count
-        )
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    def perform_update(self, serializer):
+        from apps.billing.utils import get_quota
+        from rest_framework.exceptions import PermissionDenied
+        
+        is_active = self.request.data.get('is_active')
+        if is_active is True and not serializer.instance.is_active:
+            # User is trying to activate an account
+            quota = get_quota(self.request.user, "account_count")
+            active_count = DeveloperAppAccount.objects.filter(user=self.request.user, is_active=True).count()
+            if active_count >= quota:
+                raise PermissionDenied("Plan account limit reached. Deactivate another account first.")
+        
+        serializer.save()
 
 
 
@@ -704,7 +662,7 @@ class InstagramWebhookView(APIView):
         print("Attempts:", attempts)
 
         # 🚫 If reached limit → block + send message ONCE
-        if attempts >= 3:
+        if attempts >= 2:
             print("Account flagged & blocked >>>>>>>>>>>>>>>>>>>>>>>")
 
             # Set block for 1 hour
@@ -758,6 +716,13 @@ class TemplateViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
+        from apps.billing.utils import get_quota
+        from rest_framework.exceptions import PermissionDenied
+        template_quota = get_quota(self.request.user, "template_count")
+        templates_used = Template.objects.filter(created_by=self.request.user).count()
+        if templates_used >= template_quota:
+            raise PermissionDenied("You have reached the maximum number of templates allowed on your current plan.")
+            
         serializer.save(created_by=self.request.user)
 
     def get_queryset(self):

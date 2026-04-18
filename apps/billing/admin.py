@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Plan, Feature, PlanFeature, PlanQuota, Subscription, Usage, Transaction
+from .models import Plan, Feature, PlanFeature, PlanQuota, Subscription, Usage, Transaction ,UsageLog
 
 class PlanFeatureInline(admin.TabularInline):
     model = PlanFeature
@@ -34,3 +34,11 @@ class UsageAdmin(admin.ModelAdmin):
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
     list_display = ('user', 'item_name', 'amount', 'status', 'created_at')
+
+
+@admin.register(UsageLog)
+class UsageLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'account', 'key', 'date', 'count', 'blocked_count')
+    list_filter = ('key', 'date', 'account')
+    search_fields = ('user__username', 'account__username')
+    ordering = ('-date',)

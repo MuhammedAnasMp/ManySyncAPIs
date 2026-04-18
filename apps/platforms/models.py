@@ -138,6 +138,28 @@ class Template(models.Model):
 
     def __str__(self):
         return f"{self.template_type} template {self.id}"
+
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    account = models.ForeignKey('DeveloperAppAccount', on_delete=models.SET_NULL, null=True, blank=True, related_name="notifications")
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    TYPE_CHOICES = [
+        ('success', 'Success'),
+        ('warning', 'Warning'),
+        ('error', 'Error'),
+        ('info', 'Info'),
+    ]
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='info')
+
+    def __str__(self):
+        return f"{self.user.username if self.user else 'System'} - {self.title}"
+
+    class Meta:
+        ordering = ['-created_at']
     
 
 class AccountTemplate(models.Model):

@@ -29,6 +29,8 @@ class PlanFeature(models.Model):
 
     def __str__(self):
         return f"{self.plan.name} - {self.feature.code}: {'Enabled' if self.enabled else 'Disabled'}"
+
+    
 class PlanKey(models.Model):
     name = models.CharField(max_length=50)
     description = models.TextField(blank=True)
@@ -116,6 +118,31 @@ class Usage(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.key}: {self.used}"
+
+class UsageLog(models.Model):
+    """Daily history log for tracking user activity over time."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="usage_logs")
+    account = models.ForeignKey(
+        'platforms.DeveloperAppAccount',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='usage_logs',
+        help_text="The Instagram account that triggered this usage entry."
+    )
+    key = models.CharField(max_length=50)
+    date = models.DateField()
+    count = models.IntegerField(default=0)
+    blocked_count = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('user', 'key', 'date', 'account')
+        ordering = ['-date']
+
+    def __str__(self):
+        acc = f" [{self.account}]" if self.account_id else ""
+        return f"{self.user}{acc} - {self.key}: {self.count} on {self.date}"
+
 
 class Credit(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="credit")

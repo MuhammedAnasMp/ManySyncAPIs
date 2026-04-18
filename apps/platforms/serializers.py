@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PlatformAccount, DeveloperAppAccount
+from .models import PlatformAccount, DeveloperAppAccount, Notification
 
 class PlatformAccountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -47,3 +47,10 @@ class AccountTemplateConfigurationSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountTemplateConfiguration
         fields = '__all__'
+
+class NotificationSerializer(serializers.ModelSerializer):
+    account_name = serializers.CharField(source='account.account_name', read_only=True)
+    class Meta:
+        model = Notification
+        fields = ['id', 'user', 'account', 'account_name', 'title', 'message', 'is_read', 'created_at', 'type']
+        read_only_fields = ['id', 'user', 'created_at']

@@ -391,3 +391,13 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
     except Exception as ex:
         print("Error (Post):", ex)
         return None
+
+def create_notification(user, title, message, account=None, type='info'):
+    from .models import Notification
+    return Notification.objects.create(
+        user=user,
+        account=account,
+        title=title,
+        message=message,
+        type=type
+    )

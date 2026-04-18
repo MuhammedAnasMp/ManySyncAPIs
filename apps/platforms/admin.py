@@ -1,5 +1,5 @@
 from django.contrib import admin 
-from .models import PlatformAccount, ApiUsageLog, Webhook, DeveloperAppAccount ,Template ,AccountTemplateConfiguration ,AccountTemplate
+from .models import PlatformAccount, ApiUsageLog, Webhook, DeveloperAppAccount,Notification ,Template ,AccountTemplateConfiguration ,AccountTemplate
 
 @admin.register(PlatformAccount)
 class PlatformAccountAdmin(admin.ModelAdmin):
@@ -39,3 +39,11 @@ class AccountTemplateConfigurationAdmin(admin.ModelAdmin):
 @admin.register(AccountTemplate)
 class AccountTemplateAdmin(admin.ModelAdmin):
     list_display = ('account', 'template_type', 'template')
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('user', 'title', 'is_read', 'created_at')
+    list_filter = ('is_read', 'created_at')
+    search_fields = ('title', 'content')
+    readonly_fields = ('created_at',)

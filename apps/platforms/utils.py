@@ -1,7 +1,9 @@
 
 import requests,time,os,re,random
 from .renderer import render_video, render_thumbnail, render_image
-
+BACKEND_HOST = os.getenv("BACKEND_HOST")
+from urllib.parse import urlparse
+from django.conf import settings
 
 def check_if_follows(user_id):
     access_token = "IGAAUN0phDYERBZAFprTXBTUFVLSFlSNFpGcWJXd2Y0WGF5ZAGNGUkRnRENvbFVPWVROdjVtNDRCUG1YNE1Pa3RrUm0xamlkdHVjbGw5N09od1pPbVg3ckpNRkZA1SGUwVXRtM29PMm50czNOQ3JvNlhzR0QwMTdSODkwQVpkTDR6awZDZD"
@@ -63,7 +65,20 @@ def download_video(url, folder=".", filename="video"):
         print(f"Download failed: {e}")
         return None
 
-
+def remove_local_file(url):
+    try:
+        parsed = urlparse(url)
+        
+        # /media/videos/file.mp4 → videos/file.mp4
+        relative_path = parsed.path.replace(settings.MEDIA_URL, "")
+        
+        # Build full path
+        file_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+        
+        cleanup_file(file_path)
+        
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
 
 def cleanup_file(file_path):
     """Deletes the local file if it exists."""
@@ -108,8 +123,15 @@ def upload_temp(file_path):
 
 
 def get_temp_public_url(video_url, user_id):
-    file_path = download_video(video_url, folder="videos", filename=user_id+str(random.randint(1, 1000000)))
-    return upload_temp(file_path)
+    file_path = download_video(video_url, folder="media/videos", filename=user_id+str(random.randint(1, 1000000)))
+    # return upload_temp(file_path)
+
+
+    if not file_path:
+        return None
+    
+    filename = os.path.basename(file_path)
+    return f"https://{BACKEND_HOST}/media/videos/{filename}"
 
 def clean_caption(caption):
     if not caption: return ""
@@ -234,6 +256,15 @@ def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_
         publish_res.raise_for_status()
         
         print("Published successfully:", publish_res.json())
+        if account and account.user:
+            create_notification(
+                user=account.user,
+                account=account,
+                title="Reel Uploaded Successfully",
+                message=f"Your reel has been successfully uploaded to {account.account_name}.",
+                type='success'
+            )
+        remove_local_file(url)
         return publish_res.json()
     
     except requests.exceptions.RequestException as e:
@@ -383,6 +414,15 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
         publish_res.raise_for_status()
         
         print("Post published successfully:", publish_res.json())
+        if account and account.user:
+            create_notification(
+                user=account.user,
+                account=account,
+                title="Post Uploaded Successfully",
+                message=f"Your post has been successfully uploaded to {account.account_name}.",
+                type='success'
+            )
+        remove_local_file(url)
         return publish_res.json()
     
     except requests.exceptions.RequestException as e:

@@ -21,7 +21,7 @@ class PlanListView(APIView):
         data = []
         for p in plans:
             features = p.features.filter(enabled=True).values_list('feature__code', flat=True)
-            quotas = {q.key.name: q.value for q in p.quotas.all()}
+            quotas = {q.key.name: q.value for q in p.quotas.all() if q.key.name != 'posts_per_month'}
             data.append({
                 'id': p.id,
                 'name': p.name,
@@ -254,14 +254,26 @@ class UserSubscriptionView(APIView):
                 
             features = list(PlanFeature.objects.filter(plan=sub.plan, enabled=True).values_list('feature__code', flat=True))
             
-            usage_posts = Usage.objects.filter(user=request.user, key='posts_per_month').first()
-            posts_used = usage_posts.used if usage_posts else 0
+            # usage_posts = Usage.objects.filter(user=request.user, key='posts_per_month').first()
+            # posts_used = usage_posts.used if usage_posts else 0
 
             credits_available = sub.credit
             
+            from apps.billing.models import UsageLog
+            from django.db.models import Sum
+
             template_quota = get_quota(request.user, 'template_count')
             account_quota = get_quota(request.user, 'account_count')
+            daily_quota = get_quota(request.user, 'posts_per_day')
             
+            # Daily posts used
+            today = timezone.now().date()
+            daily_posts_used = UsageLog.objects.filter(
+                user=request.user, 
+                key='posts', 
+                date=today
+            ).aggregate(total=Sum('count'))['total'] or 0
+
             # Enforce account quota: deactivate extra accounts if necessary
             all_accounts = list(DeveloperAppAccount.objects.filter(user=request.user).order_by('created_at'))
             active_accounts_count = 0
@@ -288,12 +300,14 @@ class UserSubscriptionView(APIView):
                 'end_date': sub.end_date,
                 'features': features,
                 'quotas': {
-                    'posts_per_month': get_quota(request.user, 'posts_per_month'),
+                    # 'posts_per_month': get_quota(request.user, 'posts_per_month'),
+                    'posts_per_day': daily_quota,
                     'template_count': template_quota,
                     'account_count': account_quota
                 },
                 'usage': {
-                    'posts_used': posts_used,
+                    # 'posts_used': posts_used,
+                    'daily_posts_used': daily_posts_used,
                     'templates_used': templates_used,
                     'accounts_used': accounts_used,
                     'credits_available': credits_available,

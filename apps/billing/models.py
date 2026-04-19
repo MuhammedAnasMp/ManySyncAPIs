@@ -134,6 +134,7 @@ class UsageLog(models.Model):
     date = models.DateField()
     count = models.IntegerField(default=0)
     blocked_count = models.IntegerField(default=0)
+    last_success_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ('user', 'key', 'date', 'account')
@@ -166,3 +167,6 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.item_name} - {self.amount}"
+
+
+

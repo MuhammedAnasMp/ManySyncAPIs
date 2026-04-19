@@ -434,10 +434,10 @@ class InstagramWebhookView(APIView):
                         continue
 
                     # 🔹 1. Handle TEXT messages
-                    code = message.get("text", "").strip()
+                    code = message.get("text", "").strip().lower()
 
                     if code:
-                        if code.lower().startswith("aoea"):
+                        if code.startswith("aoea"):
                             print(f"✅ Flag detected from {sender_id}: {code}")
                             username, follows = check_if_follows(sender_id)
 
@@ -474,6 +474,15 @@ class InstagramWebhookView(APIView):
                             try:
                                 account = DeveloperAppAccount.objects.get(psid=sender_id)
                                 
+                                # Consume post (check quota and log usage)
+                                from apps.billing.utils import consume_post
+                                try:
+                                    consume_post(account.user, account, post_type="reel")
+                                except Exception as e:
+                                    print(f"❌ Quota Exceeded for {account.user}: {str(e)}")
+                                    
+                                    continue
+
                                 # Fetch template
                                 account_template = AccountTemplate.objects.filter(
                                     account=account, 
@@ -516,6 +525,14 @@ class InstagramWebhookView(APIView):
                             try:
                                 account = DeveloperAppAccount.objects.get(psid=sender_id)
                                 
+                                # Consume post (check quota and log usage)
+                                from apps.billing.utils import consume_post
+                                try:
+                                    consume_post(account.user, account, post_type="image")
+                                except Exception as e:
+                                    print(f"❌ Quota Exceeded for {account.user}: {str(e)}")
+                                    continue
+
                                 # Fetch template
                                 account_template = AccountTemplate.objects.filter(
                                     account=account, 

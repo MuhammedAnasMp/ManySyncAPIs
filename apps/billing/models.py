@@ -135,6 +135,8 @@ class UsageLog(models.Model):
     count = models.IntegerField(default=0)
     blocked_count = models.IntegerField(default=0)
     last_success_at = models.DateTimeField(null=True, blank=True)
+    credit_from_plan = models.IntegerField(default=0)
+    credit_from_free = models.IntegerField(default=0)
 
     class Meta:
         unique_together = ('user', 'key', 'date', 'account')

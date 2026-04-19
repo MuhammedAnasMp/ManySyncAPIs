@@ -24,25 +24,39 @@ def get_quota(user, key):
 
 def can_post(user, account=None):
     """Check if the user has enough quota and credits to post."""
-    # 1. Credits check (Primary allowance)
+    today = timezone.now().date()
+    
+    # 1. Primary Credits check 
     has_sub_credit = hasattr(user, 'subscription') and user.subscription.credit > 0
     has_extra_credit = hasattr(user, 'credit') and user.credit.balance > 0
     
+    # 2. Daily Free Credit check (Fallback)
+    has_free_credit = False
     if not (has_sub_credit or has_extra_credit):
+        free_limit = get_quota(user, "plan_free_credit")
+        if free_limit > 0:
+            # Sum free usage today across ALL content types and accounts for this user
+            total_free_used = UsageLog.objects.filter(
+                user=user,
+                date=today
+            ).aggregate(total=Sum('credit_from_free'))['total'] or 0
+            
+            if total_free_used < free_limit:
+                has_free_credit = True
+
+    if not (has_sub_credit or has_extra_credit or has_free_credit):
         return False
 
-    # 2. Daily check
-    daily_quota = get_quota(user, "posts_per_day")
-    if daily_quota > 0 and account:
-        today = timezone.now().date()
-        # Check usage for this specific account
+    # 3. Daily Account-level check (posts_per_day)
+    daily_limit = get_quota(user, "posts_per_day")
+    if daily_limit > 0 and account:
         today_usage = UsageLog.objects.filter(
             user=user, 
             account=account,
             date=today
         ).aggregate(total=Sum('count'))['total'] or 0
         
-        if today_usage >= daily_quota:
+        if today_usage >= daily_limit:
             return False
             
     return True
@@ -55,16 +69,28 @@ def consume_post(user, account=None, post_type="post"):
     """
     today = timezone.now().date()
     
-    # 1. Check for Credit Exhaustion
+    # 1. Determine Credit Source
     has_sub_credit = hasattr(user, 'subscription') and user.subscription.credit > 0
     has_extra_credit = hasattr(user, 'credit') and user.credit.balance > 0
     
+    is_using_free_credit = False
+    
     if not (has_sub_credit or has_extra_credit):
-        error_msg = "You have run out of credits. Please renew your subscription or purchase more credits."
-        _log_blocked_attempt(user, account, post_type, today, error_msg, "Quota Exceeded")
-        raise Exception(error_msg)
+        # Fallback to daily plan_free_credit
+        free_limit = get_quota(user, "plan_free_credit")
+        total_free_used = UsageLog.objects.filter(
+            user=user,
+            date=today
+        ).aggregate(total=Sum('credit_from_free'))['total'] or 0
+        
+        if free_limit > 0 and total_free_used < free_limit:
+            is_using_free_credit = True
+        else:
+            error_msg = "You have run out of credits. Please renew your subscription or purchase more credits."
+            _log_blocked_attempt(user, account, post_type, today, error_msg, "Quota Exceeded")
+            raise Exception(error_msg)
 
-    # 2. Check for Daily Limit
+    # 2. Check for Daily Account Limit
     daily_quota = get_quota(user, "posts_per_day")
     if daily_quota > 0:
         today_usage = UsageLog.objects.filter(
@@ -80,22 +106,41 @@ def consume_post(user, account=None, post_type="post"):
             _log_blocked_attempt(user, account, post_type, today, error_msg, "Daily Limit Reached")
             raise Exception(error_msg)
 
-    # 3. Successful Consumption Logic
-    if hasattr(user, 'subscription') and user.subscription.credit > 0:
-        user.subscription.credit -= 1
-        user.subscription.save()
-    else:
-        # We already checked that at least one must be > 0
-        user.credit.balance -= 1
-        user.credit.save()
-
-    # 4. Update Daily UsageLog
+    # 3. Create or Update Usage Log
     log, _ = UsageLog.objects.get_or_create(
         user=user,
         account=account,
         key=post_type,
         date=today
     )
+
+    # 4. Consumption and Tracking
+    if is_using_free_credit:
+        # If this is the first free credit used today, notify the user
+        if total_free_used == 0:
+            try:
+                from apps.platforms.utils import create_notification
+                create_notification(
+                    user, 
+                    "Plan Credits Exhausted", 
+                    "credits is over curretly uploading useind free crdit", 
+                    account=account, 
+                    type='info'
+                )
+            except Exception as e:
+                print(f"Failed to create notification: {e}")
+        
+        log.credit_from_free += 1
+    elif hasattr(user, 'subscription') and user.subscription.credit > 0:
+        user.subscription.credit -= 1
+        user.subscription.save()
+        log.credit_from_plan += 1
+    else:
+        user.credit.balance -= 1
+        user.credit.save()
+        log.credit_from_plan += 1
+
+    # 5. Finalize Log
     log.count += 1
     log.last_success_at = timezone.now()
     log.save()

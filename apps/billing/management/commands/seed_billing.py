@@ -33,6 +33,7 @@ class Command(BaseCommand):
                     {'key': 'posts_per_day', 'value': 2},
                     {'key': 'template_count', 'value': 1},
                     {'key': 'account_count', 'value': 1},
+                    {'key': 'plan_free_credit', 'value': 2},
                 ],
                 'features': ['caption', 'hashtags']    
             },
@@ -44,6 +45,7 @@ class Command(BaseCommand):
                         {'key': 'posts_per_day', 'value': 5},
                         {'key': 'template_count', 'value': 5},
                         {'key': 'account_count', 'value': 2},
+                        {'key': 'plan_free_credit', 'value': 3},
                     ],
                 'features': ['caption', 'hashtags']
             },
@@ -55,6 +57,7 @@ class Command(BaseCommand):
                         {'key': 'posts_per_day', 'value': 10},
                         {'key': 'template_count', 'value': 15},
                         {'key': 'account_count', 'value': 5},
+                        {'key': 'plan_free_credit', 'value': 5},
                     ],
                 'features': ['caption', 'hashtags', 'thumbnail', 'image_to_reel', 'publish_template']
             },
@@ -66,6 +69,7 @@ class Command(BaseCommand):
                         {'key': 'posts_per_day', 'value': 20},
                         {'key': 'template_count', 'value': 50},
                         {'key': 'account_count', 'value': 15},
+                        {'key': 'plan_free_credit', 'value': 7},
                     ],
                 'features': ['caption', 'hashtags', 'thumbnail', 'image_to_reel', 'publish_template']
             }

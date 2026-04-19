@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.conf import settings
-from .models import Plan, Subscription, PlanFeature, PlanQuota, Usage, Transaction 
+from .models import Plan, Subscription, PlanFeature, PlanQuota, Usage, Transaction, UsageLog
 from apps.platforms.models import DeveloperAppAccount, Template
 from .utils import can_post, get_quota
 import razorpay
@@ -270,7 +270,6 @@ class UserSubscriptionView(APIView):
             today = timezone.now().date()
             daily_posts_used = UsageLog.objects.filter(
                 user=request.user, 
-                key='posts', 
                 date=today
             ).aggregate(total=Sum('count'))['total'] or 0
 
@@ -292,6 +291,12 @@ class UserSubscriptionView(APIView):
             can_add_template = templates_used < template_quota
             can_add_account = accounts_used < account_quota
             
+            free_quota = get_quota(request.user, 'plan_free_credit')
+            free_used_today = UsageLog.objects.filter(
+                user=request.user, 
+                date=today
+            ).aggregate(total=Sum('credit_from_free'))['total'] or 0
+
             return Response({
                 'has_plan': True,
                 'plan_name': sub.plan.name,
@@ -300,14 +305,14 @@ class UserSubscriptionView(APIView):
                 'end_date': sub.end_date,
                 'features': features,
                 'quotas': {
-                    # 'posts_per_month': get_quota(request.user, 'posts_per_month'),
                     'posts_per_day': daily_quota,
                     'template_count': template_quota,
-                    'account_count': account_quota
+                    'account_count': account_quota,
+                    'plan_free_credit': free_quota
                 },
                 'usage': {
-                    # 'posts_used': posts_used,
                     'daily_posts_used': daily_posts_used,
+                    'free_credits_used_today': free_used_today,
                     'templates_used': templates_used,
                     'accounts_used': accounts_used,
                     'credits_available': credits_available,
@@ -316,5 +321,24 @@ class UserSubscriptionView(APIView):
                     'can_add_account': accounts_used < account_quota
                 }
             })
+
+
+class UsageLogListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        logs = UsageLog.objects.filter(user=request.user).select_related('account').order_by('-date')[:50]
+        data = [{
+            'id': l.id,
+            'account_name': l.account.account_name if l.account else "Global",
+            'account_image': l.account.profile_picture_url if l.account else None,
+            'post_type': l.key,
+            'date': l.date,
+            'total_count': l.count,
+            'from_plan': l.credit_from_plan,
+            'from_free': l.credit_from_free,
+            'blocked': l.blocked_count
+        } for l in logs]
+        return Response({'logs': data})
         # except Exception:
             # return Response({'has_plan': False})

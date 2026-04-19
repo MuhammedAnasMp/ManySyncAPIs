@@ -38,7 +38,7 @@ class TransactionAdmin(admin.ModelAdmin):
 
 @admin.register(UsageLog)
 class UsageLogAdmin(admin.ModelAdmin):
-    list_display = ('user', 'account', 'key', 'date', 'count', 'blocked_count')
+    list_display = ('user', 'account', 'key', 'date', 'count', 'blocked_count', 'credit_from_plan', 'credit_from_free')
     list_filter = ('key', 'date', 'account')
     search_fields = ('user__username', 'account__username')
     ordering = ('-date',)

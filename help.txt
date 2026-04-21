@@ -1,4 +1,5 @@
 ngrok http --url=wanted-wolf-informed.ngrok-free.app 8000
+python -m uvicorn corebackend.asgi:application --reload
 
 
 face book new id and password

@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-7xe&3bj37l^^1fz%5to%g*cvvzwtw437n3d9v#+ltnz4857e=b
 DEBUG = os.getenv("DEBUG" , False)
 
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0",os.getenv("BACKEND_HOST")]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0",os.getenv("BACKEND_HOST"),"wanted-wolf-informed.ngrok-free.app"]
 
 
 # Application definition
@@ -88,6 +88,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'corebackend.wsgi.application'
 
+ASGI_APPLICATION = 'corebackend.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases

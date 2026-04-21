@@ -463,6 +463,105 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
         deactivate_account(account, str(ex))
         return None
 
+def upload_story(media_url_from_webhook, caption, access_token, user_id, template_json=None, configuration=None):
+    # Determine if it's a video or image
+    is_video = False
+    try:
+        res = requests.head(media_url_from_webhook)
+        content_type = res.headers.get('Content-Type', '')
+        if 'video' in content_type:
+            is_video = True
+    except Exception as e:
+        print(f"⚠️ Error checking content type: {e}")
+    
+    output_path = f"rendered_story_{user_id}_{random.randint(1, 1000000)}" + (".mp4" if is_video else ".png")
+    
+    from .models import DeveloperAppAccount
+    account = DeveloperAppAccount.objects.filter(account_id=user_id).first()
+    
+    if account and not account.is_active:
+        print(f"⚠️ Account {user_id} is inactive. Skipping story upload.")
+        return None
+
+    # Determine caption from configuration if available
+    if configuration and configuration.get("caption", {}).get("mode") == "custom":
+        caption = configuration["caption"].get("value", caption)
+
+    url = None
+    if template_json:
+        print(f"🎨 Rendering story with template for user {user_id}...")
+        try:
+            if is_video:
+                rendered_path = render_video(template_json, configuration or {}, media_url_from_webhook, output_path, account=account, raw_caption=caption)
+            else:
+                rendered_path = render_image(template_json, configuration or {}, media_url_from_webhook, output_path, account=account, raw_caption=caption)
+            
+            url = upload_temp(rendered_path)
+            if os.path.exists(output_path):
+                os.remove(output_path)
+        except Exception as render_ex:
+            print(f"❌ Rendering failed: {render_ex}. Falling back to original.")
+            url = get_temp_public_url(media_url_from_webhook, user_id)
+    else:
+        url = get_temp_public_url(media_url_from_webhook, user_id)
+
+    if not url:
+        print("❌ Failed to get a public URL for the story.")
+        return None
+
+    try:
+        # STEP 1: Create media container
+        create_url = f"https://graph.instagram.com/v25.0/{user_id}/media"
+        create_payload = {
+            "media_type": "STORIES",
+            "access_token": access_token
+        }
+        
+        if is_video:
+            create_payload["video_url"] = url
+        else:
+            create_payload["image_url"] = url
+
+        create_res = requests.post(create_url, data=create_payload)
+        create_res.raise_for_status()
+        creation_id = create_res.json().get("id")
+        print("Container created (Story):", creation_id)
+        
+        # STEP 2: Poll until processing is complete
+        status = "IN_PROGRESS"
+        while status == "IN_PROGRESS":
+            time.sleep(5)
+            status_url = f"https://graph.instagram.com/v25.0/{creation_id}"
+            status_params = {"fields": "status_code", "access_token": access_token}
+            status_res = requests.get(status_url, params=status_params)
+            status_res.raise_for_status()
+            status = status_res.json().get("status_code", "FINISHED")
+            print("Processing status (Story):", status)
+            if status == "ERROR": raise Exception("Media processing failed")
+        
+        # STEP 3: Publish the media
+        publish_url = f"https://graph.instagram.com/v25.0/{user_id}/media_publish"
+        publish_params = {"creation_id": creation_id, "access_token": access_token}
+        publish_res = requests.post(publish_url, params=publish_params)
+        publish_res.raise_for_status()
+        
+        print("Story published successfully:", publish_res.json())
+        if account and account.user:
+            create_notification(
+                user=account.user,
+                account=account,
+                title="Story Uploaded Successfully",
+                message=f"Your story has been successfully uploaded to {account.account_name}.",
+                type='success'
+            )
+        remove_local_file(url)
+        return publish_res.json()
+    
+    except Exception as ex:
+        print("Error (Story):", ex)
+        deactivate_account(account, str(ex))
+        return None
+
 def create_notification(user, title, message, account=None, type='info'):
     from .models import Notification
     return Notification.objects.create(

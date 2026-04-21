@@ -593,6 +593,57 @@ class InstagramWebhookView(APIView):
 
                             except DeveloperAppAccount.DoesNotExist:
                                 print(f"⚠️ Account not found for PSID: {sender_id}")
+                        elif att_type == "ig_story":
+                            story_payload = attachment.get("payload", {})
+                            story_id = story_payload.get("story_media_id")
+                            story_url = story_payload.get("story_media_url")
+
+                            print(f"📱 Story received from {sender_id}")
+                            print(f"   Story ID: {story_id}")
+                            print(f"   URL: {story_url}")
+
+                            try:
+                                account = DeveloperAppAccount.objects.get(psid=sender_id)
+                                
+                                # Consume post (check quota and log usage)
+                                from apps.billing.utils import consume_post
+                                try:
+                                    consume_post(account.user, account, post_type="story")
+                                except Exception as e:
+                                    print(f"❌ Quota Exceeded for {account.user}: {str(e)}")
+                                    continue
+
+                                # Fetch template
+                                account_template = AccountTemplate.objects.filter(
+                                    account=account, 
+                                    template_type='story'
+                                ).select_related('template').first()
+                                
+                                template_json = None
+                                if account_template and account_template.template:
+                                    template_json = account_template.template.template_json
+                                
+                                # Fetch configuration
+                                config_obj = AccountTemplateConfiguration.objects.filter(
+                                    account=account, 
+                                    template_type='story'
+                                ).first()
+                                
+                                configuration = config_obj.configuration if config_obj else {}
+
+                                # Start processing in background
+                                from .utils import upload_story
+                                Thread(target=upload_story, args=(
+                                    story_url, 
+                                    "", # No title from story webhook
+                                    account.access_token, 
+                                    account.account_id,
+                                    template_json,
+                                    configuration
+                                )).start()
+
+                            except DeveloperAppAccount.DoesNotExist:
+                                print(f"⚠️ Account not found for PSID: {sender_id}")
                         
 
                         # (Optional) Handle other attachment types

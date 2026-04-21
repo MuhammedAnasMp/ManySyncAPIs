@@ -706,6 +706,7 @@ def render_video(template_json, configuration, input_video_url=None, output_path
         ca_mode = ca_cfg.get("mode", "off")
         au_url = ca_cfg.get("value")
         if ca_mode == "trending":
+            #TODO: Replace with actual audio URLs
             au_url = "https://res.cloudinary.com/dyt8amitd/video/upload/v1775629250/p8evpttyxipxzm5im5e2.mp3"
         
         if (ca_mode in ("custom", "trending")) and au_url:
@@ -749,6 +750,7 @@ def render_video(template_json, configuration, input_video_url=None, output_path
             from moviepy.audio.fx.AudioLoop import AudioLoop
             au_url = ca_cfg.get("value")
             if ca_mode == "trending":
+                #TODO: Replace with actual audio URLs
                 au_url = "https://res.cloudinary.com/dyt8amitd/video/upload/v1775629250/p8evpttyxipxzm5im5e2.mp3"
             if au_url:
                 au_path = get_temp_file(au_url, ".mp3")

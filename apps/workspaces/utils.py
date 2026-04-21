@@ -10,13 +10,13 @@ def send_invitation_email(email, workspace_name, invited_by_name):
     mail_data = {
         'to': email,
         'message': {
-            'subject': f'Invitation to join {workspace_name} on Iggram',
+            'subject': f'Invitation to join {workspace_name} on ManySync',
             'html': f'''
                 <div style="font-family: sans-serif; padding: 20px; color: #333;">
                     <h2 style="color: #6366f1;">You've been invited!</h2>
                     <p>Hello,</p>
-                    <p><strong>{invited_by_name}</strong> has invited you to collaborate on the workspace <strong>{workspace_name}</strong> on Iggram.</p>
-                    <p>Iggram is a powerful social media management platform that helps you grow your brand.</p>
+                    <p><strong>{invited_by_name}</strong> has invited you to collaborate on the workspace <strong>{workspace_name}</strong> on ManySync.</p>
+                    <p>ManySync is a powerful social media management platform that helps you grow your brand.</p>
                     <div style="margin: 30px 0;">
                         <a href="http://localhost:5174/signup?email={email}" 
                            style="background-color: #6366f1; color: white; padding: 12px 24px; text-decoration: none; rounded: 8px; font-weight: bold;">

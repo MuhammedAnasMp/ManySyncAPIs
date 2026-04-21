@@ -26,6 +26,10 @@ def can_post(user, account=None):
     """Check if the user has enough quota and credits to post."""
     today = timezone.now().date()
     
+    # 0. Account active check
+    if account and not account.is_active:
+        return False
+
     # 1. Primary Credits check 
     has_sub_credit = hasattr(user, 'subscription') and user.subscription.credit > 0
     has_extra_credit = hasattr(user, 'credit') and user.credit.balance > 0
@@ -69,6 +73,12 @@ def consume_post(user, account=None, post_type="post"):
     """
     today = timezone.now().date()
     
+    # 0. Account active check
+    if account and not account.is_active:
+        error_msg = f"Your account '{account.account_name}' is currently inactive. Please activate it to continue posting."
+        _log_blocked_attempt(user, account, post_type, today, error_msg, "Account Inactive")
+        raise Exception(error_msg)
+
     # 1. Determine Credit Source
     has_sub_credit = hasattr(user, 'subscription') and user.subscription.credit > 0
     has_extra_credit = hasattr(user, 'credit') and user.credit.balance > 0

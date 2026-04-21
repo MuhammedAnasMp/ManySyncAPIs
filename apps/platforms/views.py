@@ -376,6 +376,35 @@ class DeveloperAppAccountViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(obj)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['get'])
+    def validate_token(self, request, pk=None):
+        account = self.get_object()
+        access_token = account.access_token
+        
+        if not access_token:
+            return Response({
+                "valid": False, 
+                "error": "No token found. Please remove and add the account with a new token."
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            # Check if token is valid with Instagram
+            url = "https://graph.instagram.com/me"
+            params = {"fields": "id", "access_token": access_token}
+            res = requests.get(url, params=params)
+            
+            if res.status_code == 200:
+                return Response({"valid": True}, status=status.HTTP_200_OK)
+            else:
+                error_msg = res.json().get('error', {}).get('message', 'Invalid token')
+                return Response({
+                    "valid": False, 
+                    "error": f"Token Invalid. Please remove this account and add it again with a new token.",
+                    "code": res.status_code
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"valid": False, "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def perform_update(self, serializer):
         from apps.billing.utils import get_quota
         from rest_framework.exceptions import PermissionDenied

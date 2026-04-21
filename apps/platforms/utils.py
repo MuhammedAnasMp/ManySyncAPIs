@@ -147,6 +147,25 @@ def clean_caption(caption):
 
 
 
+def deactivate_account(account, reason="API Error"):
+    """Deactivates a DeveloperAppAccount and notifies the user."""
+    if account and account.is_active:
+        account.is_active = False
+        account.save()
+        try:
+            create_notification(
+                user=account.user,
+                account=account,
+                title="Account Deactivated",
+                message=f"Your account '{account.account_name}' has been deactivated due to an error. Please re-connect it to resume posting.",
+                type='error'
+            )
+            print(f"🔴 Account {account.account_id} deactivated due to: {reason}")
+        except Exception as e:
+            print(f"Failed to create deactivation notification: {e}")
+
+
+
 def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_json=None, configuration=None):
     output_path = f"rendered_{user_id}_{random.randint(1, 1000000)}.mp4"
     thumb_output_path = f"thumb_{user_id}_{random.randint(1, 1000000)}.png"
@@ -157,6 +176,10 @@ def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_
     # 1. Handle Rendering (Video)
     from .models import DeveloperAppAccount
     account = DeveloperAppAccount.objects.filter(account_id=user_id).first()
+    
+    if account and not account.is_active:
+        print(f"⚠️ Account {user_id} is inactive. Skipping reel upload.")
+        return None
     
     if template_json:
         print(f"🎨 Rendering reel with template for user {user_id}...")
@@ -269,9 +292,11 @@ def upload_reel(reel_url_from_webhook, caption, access_token, user_id, template_
     
     except requests.exceptions.RequestException as e:
         print("Request failed:", e)
+        deactivate_account(account, str(e))
         return None
     except Exception as ex:
         print("Error:", ex)
+        deactivate_account(account, str(ex))
         return None
 
 def upload_post(image_url_from_webhook, caption, access_token, user_id, template_json=None, configuration=None):
@@ -332,6 +357,10 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
 
     from .models import DeveloperAppAccount
     account = DeveloperAppAccount.objects.filter(account_id=user_id).first()
+
+    if account and not account.is_active:
+        print(f"⚠️ Account {user_id} is inactive. Skipping post upload.")
+        return None
 
     if template_json:
         print(f"🎨 Rendering post with template for user {user_id} (As Reel: {render_as_reel})...")
@@ -427,9 +456,11 @@ def upload_post(image_url_from_webhook, caption, access_token, user_id, template
     
     except requests.exceptions.RequestException as e:
         print("Request failed (Post):", e)
+        deactivate_account(account, str(e))
         return None
     except Exception as ex:
         print("Error (Post):", ex)
+        deactivate_account(account, str(ex))
         return None
 
 def create_notification(user, title, message, account=None, type='info'):
